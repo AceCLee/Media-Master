@@ -1,0 +1,27 @@
+{
+    "video_transcoding_cmd_param_template": {
+        "nvenc": [
+            "{{nvenc_exe_filepath}}",
+            "--input",
+            "{{input_video_filepath}}",
+            "--output",
+            "{{output_video_filepath}}",
+            "--codec",
+            "hevc",
+            "--cqp",
+            "20:23:25",
+            "--output-depth",
+            "10"
+        ]
+    },
+    "audio_transcoding_cmd_param_template": {
+        "opus": [
+            "{{opusenc_exe_filepath}}",
+            "--bitrate",
+            "128.0",
+            "--vbr",
+            "{{input_audio_filepath}}",
+            "{{output_filepath}}"
+        ]
+    }
+}
