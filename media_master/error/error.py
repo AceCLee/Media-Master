@@ -16,8 +16,8 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-class RangeError(ValueError):
 
+class RangeError(ValueError):
     def __init__(self, message: str, valid_range: str):
         self.message = message
         self.valid_range = valid_range
@@ -27,7 +27,6 @@ class RangeError(ValueError):
 
 
 class MissTemplateError(ValueError):
-
     def __init__(self, message: str, missing_template: str):
         self.message = message
         self.missing_template = missing_template
@@ -38,11 +37,9 @@ missing_template:{self.missing_template}"
 
 
 class DirNotFoundError(OSError):
-
     def __init__(self, message: str):
         self.message = message
 
     def __str__(self):
         return f"message:{self.message}"
-
 

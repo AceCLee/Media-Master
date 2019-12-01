@@ -42,15 +42,20 @@
                 }
             },
             "audio_related_config": {
+                "audio_prior_option": "external",
+                "external_audio_process_option": "transcode",
                 "internal_audio_track_to_process": "all",
                 "internal_audio_process_option": "transcode",
                 "internal_audio_info_list": [],
-                "audio_transcoding_method": "qaac",
+                "internal_audio_track_order_list": [],
+                "audio_transcoding_method": "",
                 "audio_transcoding_cmd_param_template": ""
             },
             "subtitle_related_config": {
+                "subtitle_prior_option": "external",
                 "copy_internal_subtitle_bool": false,
-                "internal_subtitle_info_list": []
+                "internal_subtitle_info_list": [],
+                "internal_subtitle_track_order_list": []
             },
             "chapter_related_config": {
                 "copy_internal_chapter_bool": true

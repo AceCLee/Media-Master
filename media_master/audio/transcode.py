@@ -31,7 +31,130 @@ g_logger.propagate = True
 g_logger.setLevel(logging.DEBUG)
 
 
-def transcode_audio_flac(
+def transcode_audio_wav_2_flac(
+    input_audio_filepath: str,
+    output_audio_dir: str,
+    output_audio_name: str,
+    flac_exe_cmd_param_template: list,
+    delete_input_file_bool=False,
+    flac_exe_file_dir="",
+) -> str:
+    wav_extension: str = ".wav"
+    if not input_audio_filepath.endswith(wav_extension):
+        raise RuntimeError(f"input file must be wav file.")
+    if not isinstance(input_audio_filepath, str):
+        raise TypeError(
+            f"type of input_audio_filepath must be str \
+instead of {type(input_audio_filepath)}"
+        )
+
+    if not isinstance(output_audio_dir, str):
+        raise TypeError(
+            f"type of output_audio_dir must be str \
+instead of {type(output_audio_dir)}"
+        )
+
+    if not isinstance(output_audio_name, str):
+        raise TypeError(
+            f"type of output_audio_name must be str \
+instead of {type(output_audio_name)}"
+        )
+
+    if not isinstance(flac_exe_cmd_param_template, list):
+        raise TypeError(
+            f"type of flac_exe_cmd_param_template must be list \
+instead of {type(flac_exe_cmd_param_template)}"
+        )
+
+    if not isinstance(flac_exe_file_dir, str):
+        raise TypeError(
+            f"type of flac_exe_file_dir must be str \
+instead of {type(flac_exe_file_dir)}"
+        )
+    if not os.path.exists(input_audio_filepath):
+        raise FileNotFoundError(
+            f"input audio file cannot be found with {input_audio_filepath}"
+        )
+
+    flac_exe_name: str = "flac.exe"
+    flac_exe_name_set: set = {flac_exe_name}
+    if flac_exe_file_dir:
+        if not os.path.isdir(flac_exe_file_dir):
+            raise DirNotFoundError(
+                f"flac dir cannot be found with {flac_exe_file_dir}"
+            )
+        all_filename_list: list = os.listdir(flac_exe_file_dir)
+        for flac_exe_name in flac_exe_name_set:
+            if flac_exe_name not in all_filename_list:
+                raise FileNotFoundError(
+                    f"{flac_exe_name} cannot be found in \
+{flac_exe_file_dir}"
+                )
+    else:
+        if not check_file_environ_path(flac_exe_name_set):
+            raise FileNotFoundError(
+                f"at least one of {flac_exe_name_set} cannot \
+be found in environment path"
+            )
+    if not os.path.exists(output_audio_dir):
+        os.makedirs(output_audio_dir)
+
+    flac_suffix: str = ".flac"
+    output_audio_fullname: str = output_audio_name + flac_suffix
+    output_filepath: str = os.path.join(
+        output_audio_dir, output_audio_fullname
+    )
+    flac_exe_filepath: str = os.path.join(flac_exe_file_dir, flac_exe_name)
+
+    program_param_dict = {
+        "flac_exe_filepath": flac_exe_filepath,
+        "input_audio_filepath": input_audio_filepath,
+        "output_filepath": output_filepath,
+    }
+
+    flac_exe_cmd_param = replace_param_template_list(
+        flac_exe_cmd_param_template, program_param_dict
+    )
+
+    flac_param_debug_str: str = (
+        f"audio flac: param: {subprocess.list2cmdline(flac_exe_cmd_param)}"
+    )
+    g_logger.log(logging.DEBUG, flac_param_debug_str)
+
+    start_info_str: str = f"audio flac: starting encoding {output_filepath}"
+
+    print(start_info_str, file=sys.stderr)
+    g_logger.log(logging.INFO, start_info_str)
+    
+    process: subprocess.Popen = subprocess.Popen(flac_exe_cmd_param)
+
+    process.wait()
+
+    if process.returncode == 0:
+        end_info_str: str = (
+            f"audio flac: transcode {input_audio_filepath} to "
+            f"{output_filepath} successfully."
+        )
+        print(end_info_str, file=sys.stderr)
+        g_logger.log(logging.INFO, end_info_str)
+    else:
+        raise ChildProcessError(
+            f"audio flac: transcode {input_audio_filepath} to "
+            f"{output_filepath} unsuccessfully!"
+        )
+    if delete_input_file_bool and not os.path.samefile(
+        input_audio_filepath, output_filepath
+    ):
+        delete_info_str: str = f"audio flac: delete {input_audio_filepath}"
+
+        print(delete_info_str, file=sys.stderr)
+        g_logger.log(logging.INFO, delete_info_str)
+        os.remove(input_audio_filepath)
+
+    return output_filepath
+
+
+def transcode_audio_flac_ffmpeg(
     input_audio_filepath: str,
     output_audio_dir: str,
     output_audio_name: str,
@@ -291,7 +414,7 @@ be found in environment path"
     )
     if opusenc_unsupport_bool:
         
-        input_audio_filepath = transcode_audio_flac(
+        input_audio_filepath = transcode_audio_flac_ffmpeg(
             input_audio_filepath,
             output_audio_dir,
             output_audio_name,

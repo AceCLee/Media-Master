@@ -28,10 +28,15 @@ from collections import namedtuple
 from pymediainfo import MediaInfo
 
 
-from .audio import transcode_audio_opus, transcode_audio_qaac
+from .audio import (
+    transcode_audio_opus,
+    transcode_audio_qaac,
+    transcode_audio_wav_2_flac,
+)
 from .log import get_logger
 from .util import (
     multiplex,
+    remultiplex_one_file,
     extract_all_attachments,
     extract_all_subtitles,
     extract_audio_track,
@@ -39,6 +44,7 @@ from .util import (
     load_config,
     copy_video,
     get_proper_frame_rate,
+    resort,
 )
 from .video import (
     SegmentedConfigX265VspipeTranscoding,
@@ -90,6 +96,7 @@ class CompleteVideoTranscoding(object):
         self._remove_filepath_set: set = set()
 
     def transcode(self) -> str:
+        self._pre_multiplex()
         self._subtitle_process()
         self._chapter_process()
         self._attachment_process()
@@ -100,32 +107,144 @@ class CompleteVideoTranscoding(object):
 
         return self._output_video_filepath
 
-    def _audio_process(self):
-        original_audio_track_file_list: list = extract_audio_track(
-            self._input_video_filepath,
-            self._cache_dir,
-            self._output_video_filename,
-            audio_track=self._config.internal_audio_track_to_process,
-        )
-        self._remove_filepath_set |= set(
-            audio_track_file.filepath
-            for audio_track_file in original_audio_track_file_list
-        )
-        for index in range(len(original_audio_track_file_list)):
-            if index < len(self._config.internal_audio_info_list):
-                original_audio_track_file_list[
-                    index
-                ].title = self._config.internal_audio_info_list[index]["title"]
-                original_audio_track_file_list[
-                    index
-                ].language = self._config.internal_audio_info_list[index][
-                    "language"
-                ]
-            else:
-                break
+    def _pre_multiplex(self):
+        unreliable_filename_extension_set: set = {".m2ts"}
+        input_full_filename: str = os.path.basename(self._input_video_filepath)
+        filename, extension = os.path.splitext(input_full_filename)
+        if extension in unreliable_filename_extension_set:
+            new_filename: str = f"{filename}_pre_multiplex"
+            new_input_filepath: str = remultiplex_one_file(
+                input_filepath=self._input_video_filepath,
+                output_file_dir=self._cache_dir,
+                output_file_name=new_filename,
+            )
+            self._input_video_filepath = new_input_filepath
 
+    def _audio_transcode(self, audio_track_file_list: list) -> list:
+        transcoded_audio_track_file_list: list = []
+        for index, audio_track_file in enumerate(audio_track_file_list):
+            transcoded_audio_filename: str = (
+                self._output_video_filename + f"_audio_index_{index}"
+            )
+            if self._config.audio_transcoding_method == "opus":
+                transcoded_audio_filepath: str = transcode_audio_opus(
+                    audio_track_file.filepath,
+                    self._cache_dir,
+                    transcoded_audio_filename,
+                    self._config.audio_transcoding_cmd_param_template,
+                )
+            elif self._config.audio_transcoding_method == "qaac":
+                transcoded_audio_filepath: str = transcode_audio_qaac(
+                    audio_track_file.filepath,
+                    self._cache_dir,
+                    transcoded_audio_filename,
+                    self._config.audio_transcoding_cmd_param_template,
+                )
+            elif self._config.audio_transcoding_method == "flac":
+                transcoded_audio_filepath: str = (
+                    transcode_audio_wav_2_flac(
+                        audio_track_file.filepath,
+                        self._cache_dir,
+                        transcoded_audio_filename,
+                        self._config.audio_transcoding_cmd_param_template,
+                    )
+                )
+            else:
+                raise RuntimeError(
+                    f"Unsupport transcoding method: "
+                    f"{self._config.audio_transcoding_method}"
+                )
+            self._remove_filepath_set.add(transcoded_audio_filepath)
+
+            transcoded_audio_track_file = copy.deepcopy(audio_track_file)
+            transcoded_audio_track_file.filepath = transcoded_audio_filepath
+            transcoded_audio_track_file_list.append(
+                transcoded_audio_track_file
+            )
+
+            return transcoded_audio_track_file_list
+
+    def _audio_process(self):
+        internal_audio_process_available_option_set: set = {
+            "copy",
+            "transcode",
+            "skip",
+        }
+        external_audio_process_available_option_set: set = {
+            "copy",
+            "transcode",
+        }
+        audio_prior_available_option_set: set = {"internal", "external"}
+        if (
+            self._config.internal_audio_process_option
+            not in internal_audio_process_available_option_set
+        ):
+            raise RangeError(
+                message=(
+                    f"Unknown internal_audio_process_option: "
+                    f"{self._config.internal_audio_process_option}"
+                ),
+                valid_range=str(internal_audio_process_available_option_set),
+            )
+        if (
+            self._config.external_audio_process_option
+            not in external_audio_process_available_option_set
+        ):
+            raise RangeError(
+                message=(
+                    f"Unknown external_audio_process_option: "
+                    f"{self._config.external_audio_process_option}"
+                ),
+                valid_range=str(external_audio_process_available_option_set),
+            )
+
+        if (
+            self._config.audio_prior_option
+            not in audio_prior_available_option_set
+        ):
+            raise RangeError(
+                message=(
+                    f"Unknown audio_prior_option: "
+                    f"{self._config.audio_prior_option}"
+                ),
+                valid_range=str(audio_prior_available_option_set),
+            )
+
+        internal_audio_track_file_list: list = []
+        if self._config.internal_audio_process_option != "skip":
+            internal_audio_track_file_list: list = extract_audio_track(
+                self._input_video_filepath,
+                self._cache_dir,
+                self._output_video_filename,
+                audio_track=self._config.internal_audio_track_to_process,
+            )
+            self._remove_filepath_set |= set(
+                audio_track_file.filepath
+                for audio_track_file in internal_audio_track_file_list
+            )
+            for index in range(len(internal_audio_track_file_list)):
+                if index < len(self._config.internal_audio_info_list):
+                    internal_audio_track_file_list[
+                        index
+                    ].title = self._config.internal_audio_info_list[index][
+                        "title"
+                    ]
+                    internal_audio_track_file_list[
+                        index
+                    ].language = self._config.internal_audio_info_list[index][
+                        "language"
+                    ]
+                else:
+                    break
+
+            if self._config.internal_audio_track_order_list:
+                internal_audio_track_file_list = resort(
+                    src=internal_audio_track_file_list,
+                    order_list=self._config.internal_audio_track_order_list,
+                )
+
+        external_audio_track_file_list: list = []
         if self._config.external_audio_info_list:
-            external_audio_track_file_list: list = []
             for index, external_audio_info in enumerate(
                 self._config.external_audio_info_list
             ):
@@ -154,49 +273,61 @@ class CompleteVideoTranscoding(object):
                 )
                 external_audio_track_file_list.append(audio_track_file)
 
-            original_audio_track_file_list += external_audio_track_file_list
-
-        self._transcoded_audio_track_file_list = original_audio_track_file_list
-
+        output_internal_audio_track_file_list: list = []
         if self._config.internal_audio_process_option == "transcode":
-            transcoded_audio_track_file_list: list = []
-            for index, audio_track_file in enumerate(
-                original_audio_track_file_list
-            ):
-                transcoded_audio_filename: str = (
-                    self._output_video_filename + f"_audio_index_{index}"
-                )
-                if self._config.audio_transcoding_method == "opus":
-                    transcoded_audio_filepath: str = transcode_audio_opus(
-                        audio_track_file.filepath,
-                        self._cache_dir,
-                        transcoded_audio_filename,
-                        self._config.audio_transcoding_cmd_param_template,
-                    )
-                elif self._config.audio_transcoding_method == "qaac":
-                    transcoded_audio_filepath: str = transcode_audio_qaac(
-                        audio_track_file.filepath,
-                        self._cache_dir,
-                        transcoded_audio_filename,
-                        self._config.audio_transcoding_cmd_param_template,
-                    )
-                else:
-                    raise RuntimeError("未实现")
-                self._remove_filepath_set.add(transcoded_audio_filepath)
-
-                transcoded_audio_track_file = copy.deepcopy(audio_track_file)
-                transcoded_audio_track_file.filepath = (
-                    transcoded_audio_filepath
-                )
-
-                transcoded_audio_track_file_list.append(
-                    transcoded_audio_track_file
-                )
-            self._transcoded_audio_track_file_list = (
-                transcoded_audio_track_file_list
+            output_internal_audio_track_file_list += self._audio_transcode(
+                internal_audio_track_file_list
             )
+        elif self._config.internal_audio_process_option == "copy":
+            output_internal_audio_track_file_list += (
+                internal_audio_track_file_list
+            )
+        elif self._config.internal_audio_process_option == "skip":
+            pass
+        else:
+            raise RuntimeError("It's impossible to execute this code.")
+
+        output_external_audio_track_file_list: list = []
+        if self._config.external_audio_process_option == "transcode":
+            output_external_audio_track_file_list += self._audio_transcode(
+                external_audio_track_file_list
+            )
+        elif self._config.external_audio_process_option == "copy":
+            output_external_audio_track_file_list += (
+                external_audio_track_file_list
+            )
+        else:
+            raise RuntimeError("It's impossible to execute this code.")
+
+        self._output_audio_track_file_list: list = []
+        if self._config.audio_prior_option == "internal":
+            self._output_audio_track_file_list: list = (
+                output_internal_audio_track_file_list
+                + output_external_audio_track_file_list
+            )
+        elif self._config.audio_prior_option == "external":
+            self._output_audio_track_file_list: list = (
+                output_external_audio_track_file_list
+                + output_internal_audio_track_file_list
+            )
+        else:
+            raise RuntimeError("It's impossible to execute this code.")
 
     def _subtitle_process(self):
+        subtitle_prior_available_option_set: set = {"internal", "external"}
+
+        if (
+            self._config.subtitle_prior_option
+            not in subtitle_prior_available_option_set
+        ):
+            raise RangeError(
+                message=(
+                    f"Unknown subtitle_prior_option: "
+                    f"{self._config.subtitle_prior_option}"
+                ),
+                valid_range=str(subtitle_prior_available_option_set),
+            )
+
         external_subtitle_info_list: list = copy.deepcopy(
             self._config.external_subtitle_info_list
         )
@@ -216,9 +347,8 @@ class CompleteVideoTranscoding(object):
                 forced_bool=False,
             )
             external_text_track_file_list.append(text_track_file)
-        self._output_text_track_file_list: list = (
-            external_text_track_file_list
-        )
+
+        internal_text_track_file_list: list = []
         if self._config.copy_internal_subtitle_bool:
             text_track_file_list: list = copy.deepcopy(
                 extract_all_subtitles(
@@ -244,13 +374,47 @@ class CompleteVideoTranscoding(object):
                     ][
                         "language"
                     ]
-            self._output_text_track_file_list += text_track_file_list
+
+            if self._config.internal_subtitle_track_order_list:
+                text_track_file_list = resort(
+                    src=text_track_file_list,
+                    order_list=self._config.internal_subtitle_track_order_list,
+                )
+
+            internal_text_track_file_list += text_track_file_list
+
+        self._output_text_track_file_list: list = []
+        if self._config.subtitle_prior_option == "internal":
+            self._output_text_track_file_list: list = (
+                internal_text_track_file_list + external_text_track_file_list
+            )
+        elif self._config.subtitle_prior_option == "external":
+            self._output_text_track_file_list: list = (
+                external_text_track_file_list + internal_text_track_file_list
+            )
+        else:
+            raise RuntimeError("It's impossible to execute this code.")
 
     def _chapter_process(self):
+        chapter_filename_extension: str = ".xml"
         if self._config.external_chapter_info["filepath"]:
-            self._menu_track_file = MenuTrackFile(
-                filepath=self._config.external_chapter_info["filepath"]
-            )
+            if self._config.external_chapter_info["filepath"].endswith(
+                chapter_filename_extension
+            ):
+                self._menu_track_file = MenuTrackFile(
+                    filepath=self._config.external_chapter_info["filepath"]
+                )
+            else:
+                self._menu_track_file = extract_chapter(
+                    self._config.external_chapter_info["filepath"],
+                    self._cache_dir,
+                    self._output_video_filename,
+                )
+                if self._menu_track_file is None:
+                    raise RuntimeError(
+                        f"There are no chapter info in "
+                        f"{self._config.external_chapter_info['filepath']}"
+                    )
         elif self._config.copy_internal_chapter_bool:
             self._menu_track_file = extract_chapter(
                 self._input_video_filepath,
@@ -347,7 +511,7 @@ class CompleteVideoTranscoding(object):
                 ),
             )
 
-            self._transcoded_video_track_file = (
+            self._output_video_track_file = (
                 self._video_track_file
             ) = video_track_file
 
@@ -500,17 +664,17 @@ class CompleteVideoTranscoding(object):
                     f"!= output frame count:{frame_count}"
                 )
 
-            self._transcoded_video_track_file = copy.deepcopy(
+            self._output_video_track_file = copy.deepcopy(
                 self._video_track_file
             )
-            self._transcoded_video_track_file.filepath = (
+            self._output_video_track_file.filepath = (
                 compressed_video_cache_filepath
             )
-            self._transcoded_video_track_file.color_range = (
+            self._output_video_track_file.color_range = (
                 "full" if self._config.output_full_range_bool else "limited"
             )
-            self._transcoded_video_track_file.title = self._config.video_title
-            self._transcoded_video_track_file.language = (
+            self._output_video_track_file.title = self._config.video_title
+            self._output_video_track_file.language = (
                 self._config.video_language
             )
             self._remove_filepath_set.add(compressed_video_cache_filepath)
@@ -518,12 +682,12 @@ class CompleteVideoTranscoding(object):
     def _multiplex_all(self):
         track_info_list: list = [
             {
-                "filepath": self._transcoded_video_track_file.filepath,
-                "sync_delay": self._transcoded_video_track_file.delay_ms,
-                "track_type": self._transcoded_video_track_file.track_type,
-                "track_name": self._transcoded_video_track_file.title,
-                "language": self._transcoded_video_track_file.language,
-                "original_index": self._transcoded_video_track_file.track_index
+                "filepath": self._output_video_track_file.filepath,
+                "sync_delay": self._output_video_track_file.delay_ms,
+                "track_type": self._output_video_track_file.track_type,
+                "track_name": self._output_video_track_file.title,
+                "language": self._output_video_track_file.language,
+                "original_index": self._output_video_track_file.track_index
                 if self._config.video_process_option == "copy"
                 else 0,
             }
@@ -537,7 +701,7 @@ class CompleteVideoTranscoding(object):
                 language=audio_track_file.language,
                 original_index=0,
             )
-            for audio_track_file in self._transcoded_audio_track_file_list
+            for audio_track_file in self._output_audio_track_file_list
         ]
 
         track_info_list += [
@@ -742,15 +906,12 @@ class SeriesVideoTranscoding(object):
                             filename,
                         )
                     )
-        if (
-            self._config.external_chapter_info["chapter_dir"]
-            and self._config.external_chapter_info["chapter_filename_reexp"]
-        ):
-            raise RuntimeError(
-                f"Can not match any one chapter with "
-                f"{self._config.external_chapter_info['chapter_filename_reexp']} "
-                f"in {self._config.external_chapter_info['chapter_dir']}"
-            )
+            if not chapter_info:
+                raise RuntimeError(
+                    f"Can not match any one chapter with "
+                    f"{self._config.external_chapter_info['chapter_filename_reexp']} "
+                    f"in {self._config.external_chapter_info['chapter_dir']}"
+                )
         if self._config.external_subtitle_info_list:
             length_list: list = []
             length_list.append(len(video_info))

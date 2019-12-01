@@ -24,7 +24,7 @@ import re
 import pandas as pd
 import numpy as np
 from ..util import check_file_environ_path
-from ..error import DirNotFoundError, RangeError
+from ..error import DirNotFoundError
 from ..util import save_config
 
 g_logger = logging.getLogger(__name__)
@@ -134,8 +134,7 @@ already existed, skip analysis."
 
     print(start_info_str, file=sys.stderr)
     g_logger.log(logging.INFO, start_info_str)
-    
-    
+
     process = subprocess.Popen(args_list, shell=True)
 
     return_code = process.wait()
@@ -159,7 +158,7 @@ def save_high_bitrate_gop_info(
     config_json_filepath: str,
     thread_num: int,
     config: dict,
-    minimum_gop_length=60,
+    minimum_gop_length=300,
 ):
     json_dir: str = os.path.dirname(config_json_filepath)
     if not os.path.isdir(json_dir):
@@ -173,8 +172,10 @@ def save_high_bitrate_gop_info(
             if "N/A" in line:
                 continue
             csv_text += line
+    csv_text = csv_text.replace("\n\n\n", "\n")
     with open(csv_filepath, mode="w") as csv_file:
         csv_file.write(csv_text)
+    unknown_name_list: list = [f"unknown{index}" for index in range(10)]
     original_frame_df: pd.DataFrame = pd.read_csv(
         csv_filepath,
         names=[
@@ -207,7 +208,8 @@ def save_high_bitrate_gop_info(
             "color_space2",
             "color_space3",
             "unspecified",
-        ],
+        ]
+        + unknown_name_list,
         low_memory=False,
     )
     frame_df = original_frame_df[["key_frame", "pkt_size"]]
@@ -220,13 +222,21 @@ def save_high_bitrate_gop_info(
         frame_df[frame_df["key_frame"] == 1].index
     )
     key_frame_index_list: list = [key_frame_index_array[0]]
-    for index in range(1, len(key_frame_index_array)):
-        last_index: int = index - 1
-        if (
-            key_frame_index_array[index] - key_frame_index_array[last_index]
-        ) < minimum_gop_length:
-            continue
-        key_frame_index_list.append(key_frame_index_array[index])
+
+    key_frame_index_array_index: int = 0
+    while key_frame_index_array_index < len(key_frame_index_array):
+        least_next_key_frame_index: int = key_frame_index_array[
+            key_frame_index_array_index
+        ] + minimum_gop_length
+        next_key_frame_index_index: int = np.searchsorted(
+            key_frame_index_array, least_next_key_frame_index
+        )
+        if next_key_frame_index_index >= len(key_frame_index_array):
+            break
+        key_frame_index_list.append(
+            key_frame_index_array[next_key_frame_index_index]
+        )
+        key_frame_index_array_index = next_key_frame_index_index
     key_frame_index_array = np.array(key_frame_index_list, dtype=int)
 
     for gop_index in range(key_frame_index_array.shape[0] - 1):
@@ -235,7 +245,6 @@ def save_high_bitrate_gop_info(
         mean: float = frame_df["pkt_size"][index:next_index].values.mean()
         frame_df.iloc[index, 2] = mean
         frame_df.iloc[index, 3] = int(next_index)
-        
 
     output_list: list = []
     for key in config["multiple_config"].keys():
@@ -251,7 +260,7 @@ def save_high_bitrate_gop_info(
             re_result = re.search(re_exp, key)
             multiple_min = float(re_result.group(1))
             multiple_max = float(re_result.group(2))
-        
+
         if multiple_max != -1:
             if multiple_min == 0:
                 multiple_min = 0.01
@@ -316,6 +325,7 @@ def save_series_high_bitrate_gop_info(
     output_json_dir: str,
     thread_num: int,
     config: dict,
+    minimum_gop_length: int,
 ):
 
     if not os.path.isdir(output_json_dir):
@@ -338,7 +348,11 @@ def save_series_high_bitrate_gop_info(
             json_filepath: str = os.path.join(output_json_dir, json_filename)
             print(input_filepath, json_filepath)
             gop_info_list: list = save_high_bitrate_gop_info(
-                input_filepath, json_filepath, thread_num, config
+                input_filepath,
+                json_filepath,
+                thread_num,
+                config,
+                minimum_gop_length=minimum_gop_length,
             )
             episode_num: int = int(re_result.group(1))
             all_gop_info_dict[str(episode_num)] = gop_info_list

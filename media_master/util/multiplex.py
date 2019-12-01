@@ -29,6 +29,113 @@ g_logger.propagate = True
 g_logger.setLevel(logging.DEBUG)
 
 
+def remultiplex_one_file(
+    input_filepath: str,
+    output_file_dir: str,
+    output_file_name: str,
+    mkvmerge_exe_file_dir="",
+):
+    if not isinstance(output_file_dir, str):
+        raise TypeError(
+            f"type of output_file_dir must be str \
+instead of {type(output_file_dir)}"
+        )
+
+    if not isinstance(output_file_name, str):
+        raise TypeError(
+            f"type of output_file_name must be str \
+instead of {type(output_file_name)}"
+        )
+
+    if not isinstance(mkvmerge_exe_file_dir, str):
+        raise TypeError(
+            f"type of mkvmerge_exe_file_dir must be str \
+instead of {type(mkvmerge_exe_file_dir)}"
+        )
+
+    mkvmerge_exe_filename: str = "mkvmerge.exe"
+    if mkvmerge_exe_file_dir:
+        if not os.path.isdir(mkvmerge_exe_file_dir):
+            raise DirNotFoundError(
+                f"mkvmerge dir cannot be found with {mkvmerge_exe_file_dir}"
+            )
+        all_filename_list: list = os.listdir(mkvmerge_exe_file_dir)
+        if mkvmerge_exe_filename not in all_filename_list:
+            raise FileNotFoundError(
+                f"{mkvmerge_exe_filename} cannot be found in \
+{mkvmerge_exe_file_dir}"
+            )
+    else:
+        if not check_file_environ_path({mkvmerge_exe_filename}):
+            raise FileNotFoundError(
+                f"{mkvmerge_exe_filename} cannot be found in \
+environment path"
+            )
+    if not os.path.exists(output_file_dir):
+        os.makedirs(output_file_dir)
+
+    mkv_suffix: str = ".mkv"
+    mkvmerge_exe_filepath: str = os.path.join(
+        mkvmerge_exe_file_dir, mkvmerge_exe_filename
+    )
+    output_filename_fullname: str = output_file_name + mkv_suffix
+    output_filepath: str = os.path.join(
+        output_file_dir, output_filename_fullname
+    )
+
+    if os.path.isfile(output_filepath):
+        skip_info_str: str = (
+            f"multiplex mkvmerge: {output_filepath} "
+            f"already existed, skip multiplexing."
+        )
+
+        print(skip_info_str, file=sys.stderr)
+        g_logger.log(logging.INFO, skip_info_str)
+        return output_filepath
+    output_key: str = "--output"
+    output_value: str = output_filepath
+    input_key: str = input_filepath
+    cmd_param_list: list = [
+        mkvmerge_exe_filepath,
+        output_key,
+        output_value,
+        input_key,
+    ]
+
+    mkvmerge_param_debug_str: str = (
+        f"multiplex mkvmerge: param:"
+        f"{subprocess.list2cmdline(cmd_param_list)}"
+    )
+    g_logger.log(logging.DEBUG, mkvmerge_param_debug_str)
+
+    start_info_str: str = (
+        f"multiplex mkvmerge: starting multiplexing {output_filepath}"
+    )
+
+    print(start_info_str, file=sys.stderr)
+    g_logger.log(logging.INFO, start_info_str)
+    
+    
+    process = subprocess.Popen(cmd_param_list)
+
+    return_code = process.wait()
+
+    if return_code == 0:
+        end_info_str: str = (
+            f"multiplex mkvmerge: "
+            f"multiplex {output_filepath} successfully."
+        )
+        print(end_info_str, file=sys.stderr)
+        g_logger.log(logging.INFO, end_info_str)
+    else:
+        raise ChildProcessError(
+            f"multiplex mkvmerge: "
+            f"multiplex {output_filepath} unsuccessfully."
+        )
+
+    return output_filepath
+
+
 def multiplex(
     track_info_list: list,
     output_file_dir: str,
@@ -214,30 +321,69 @@ environment path"
         for filepath in attachments_filepath_set:
             cmd_param_list += [attachment_key, filepath]
 
-    mkvmerge_param_debug_str: str = f"multiplex mkvmerge: param:\
-{subprocess.list2cmdline(cmd_param_list)}"
+    mkvmerge_param_debug_str: str = (
+        f"multiplex mkvmerge: param:"
+        f"{subprocess.list2cmdline(cmd_param_list)}"
+    )
     g_logger.log(logging.DEBUG, mkvmerge_param_debug_str)
 
-    start_info_str: str = f"multiplex mkvmerge: starting encapsulating \
-{output_filepath}"
+    start_info_str: str = (
+        f"multiplex mkvmerge: starting multiplexing {output_filepath}"
+    )
 
     print(start_info_str, file=sys.stderr)
     g_logger.log(logging.INFO, start_info_str)
     
     
-    process = subprocess.Popen(cmd_param_list)
+    process = subprocess.Popen(
+        cmd_param_list, stdout=subprocess.PIPE, text=True, encoding="utf-8"
+    )
 
-    return_code = process.wait()
+    stdout_lines: list = []
+    while process.poll() is None:
+        stdout_line = process.stdout.readline()
+        stdout_lines.append(stdout_line)
+        print(stdout_line, end="", file=sys.stderr)
+
+    return_code = process.returncode
+    
+    
+    
+    
+    
 
     if return_code == 0:
-        end_info_str: str = f"multiplex mkvmerge: \
-multiplex {output_filepath} successfully."
+        end_info_str: str = (
+            f"multiplex mkvmerge: "
+            f"multiplex {output_filepath} successfully."
+        )
         print(end_info_str, file=sys.stderr)
         g_logger.log(logging.INFO, end_info_str)
+    elif return_code == 1:
+        warning_prefix = "Warning:"
+        warning_text_str = "".join(
+            line for line in stdout_lines if line.startswith(warning_prefix)
+        )
+        stdout_text_str = "".join(stdout_lines)
+        warning_str: str = (
+            "multiplex mkvmerge: "
+            "mkvmerge has output at least one warning, "
+            "but muxing did continue.\n"
+            f"warning:\n{warning_text_str}"
+            f"stdout:\n{stdout_text_str}"
+        )
+        print(warning_str, file=sys.stderr)
+        g_logger.log(logging.WARNING, warning_str)
     else:
-        raise ChildProcessError(
-            f"multiplex mkvmerge: \
-multiplex {output_filepath} unsuccessfully."
+        error_str = (
+            f"multiplex mkvmerge: "
+            f"multiplex {output_filepath} unsuccessfully."
+        )
+        print(error_str, file=sys.stderr)
+        raise subprocess.CalledProcessError(
+            returncode=return_code,
+            cmd=subprocess.list2cmdline(cmd_param_list),
+            output=stdout_text_str,
         )
 
     return output_filepath

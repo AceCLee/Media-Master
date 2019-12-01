@@ -64,22 +64,31 @@ def get_proper_frame_rate(
     return return_fps
 
 
-def reliable_meta_data(media_info_data: dict, lowest_mkvmerge_version=20):
-    general_info: dict = media_info_data["tracks"][0]
-    writing_application_str: str = general_info["writing_application"]
-    mkvmerge_str: str = "mkvmerge"
-    mkvmerge_re_exp: str = "mkvmerge v(\\d+)\\.(\\d+)\\.(\\d+)"
-    if mkvmerge_str in writing_application_str:
-        re_result = re.search(mkvmerge_re_exp, writing_application_str)
-        if re_result:
-            version = int(re_result.group(1))
-            if version < lowest_mkvmerge_version:
-                return False
+def reliable_meta_data(
+    input_filename: str, media_info_data: dict, lowest_mkvmerge_version=20
+):
+    mkv_extension: str = ".mkv"
+    m2ts_extension: str = ".m2ts"
+    if input_filename.endswith(mkv_extension):
+        general_info: dict = media_info_data["tracks"][0]
+        writing_application_str: str = general_info["writing_application"]
+        mkvmerge_str: str = "mkvmerge"
+        mkvmerge_re_exp: str = "mkvmerge v(\\d+)\\.(\\d+)\\.(\\d+)"
+        if mkvmerge_str in writing_application_str:
+            re_result = re.search(mkvmerge_re_exp, writing_application_str)
+            if re_result:
+                version = int(re_result.group(1))
+                if version < lowest_mkvmerge_version:
+                    return False
+                else:
+                    return True
             else:
-                return True
+                raise RuntimeError(
+                    f"Unknown writing_application_str {writing_application_str}"
+                )
         else:
-            raise RuntimeError(
-                f"Unknown writing_application_str {writing_application_str}"
-            )
+            return False
+    elif input_filename.endswith(m2ts_extension):
+        return True
     else:
         return False
