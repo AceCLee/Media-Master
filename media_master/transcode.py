@@ -288,16 +288,17 @@ class CompleteVideoTranscoding(object):
             raise RuntimeError("It's impossible to execute this code.")
 
         output_external_audio_track_file_list: list = []
-        if self._config.external_audio_process_option == "transcode":
-            output_external_audio_track_file_list += self._audio_transcode(
-                external_audio_track_file_list
-            )
-        elif self._config.external_audio_process_option == "copy":
-            output_external_audio_track_file_list += (
-                external_audio_track_file_list
-            )
-        else:
-            raise RuntimeError("It's impossible to execute this code.")
+        if external_audio_track_file_list:
+            if self._config.external_audio_process_option == "transcode":
+                output_external_audio_track_file_list += self._audio_transcode(
+                    external_audio_track_file_list
+                )
+            elif self._config.external_audio_process_option == "copy":
+                output_external_audio_track_file_list += (
+                    external_audio_track_file_list
+                )
+            else:
+                raise RuntimeError("It's impossible to execute this code.")
 
         self._output_audio_track_file_list: list = []
         if self._config.audio_prior_option == "internal":

@@ -17,3 +17,7 @@
   * 之前的实现为只要不返回0，就会抛出错误，现在的实现为若返回1(mkvmerge输出警告)，程序继续运行，将在日志中记录警告，若返回2，抛出错误
 * 配置文件中增加了audio_prior_option、external_audio_process_option、internal_audio_track_order_list、subtitle_prior_option、internal_subtitle_track_order_list四个选项，用于对于内外置音轨和内外置字幕更加细致的控制
 * 修复若干错误
+
+### Version 0.0.17.1
+
+* 修复无法正确读取音频的错误
