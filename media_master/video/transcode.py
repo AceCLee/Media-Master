@@ -34,7 +34,7 @@ from ..util import (
     save_config,
     load_config,
     hash_name,
-    is_template,
+    is_template
 )
 
 g_logger = logging.getLogger(__name__)
@@ -68,8 +68,8 @@ class VideoTranscoding(object):
     ):
         if not isinstance(input_video_filepath, str):
             raise TypeError(
-                f"type of input_video_filepath must be str \
-instead of {type(input_video_filepath)}"
+                f"type of input_video_filepath must be str "
+                f"instead of {type(input_video_filepath)}"
             )
         self._input_video_filepath: str = input_video_filepath
 
@@ -80,22 +80,22 @@ instead of {type(input_video_filepath)}"
 
         if not isinstance(output_video_dir, str):
             raise TypeError(
-                f"type of output_video_dir must be str \
-instead of {type(output_video_dir)}"
+                f"type of output_video_dir must be str "
+                f"instead of {type(output_video_dir)}"
             )
         self._output_video_dir: str = output_video_dir
 
         if not isinstance(output_video_filename, str):
             raise TypeError(
-                f"type of output_video_filename must be str \
-instead of {type(output_video_filename)}"
+                f"type of output_video_filename must be str "
+                f"instead of {type(output_video_filename)}"
             )
         self._output_video_filename: str = output_video_filename
 
         if not isinstance(transcoding_cmd_param_template, list):
             raise TypeError(
-                f"type of transcoding_cmd_param_template must be list \
-instead of {type(transcoding_cmd_param_template)}"
+                f"type of transcoding_cmd_param_template must be list "
+                f"instead of {type(transcoding_cmd_param_template)}"
             )
         self._transcoding_cmd_param_template: list = copy.deepcopy(
             transcoding_cmd_param_template
@@ -103,8 +103,8 @@ instead of {type(transcoding_cmd_param_template)}"
 
         if not isinstance(other_config, dict):
             raise TypeError(
-                f"type of other_config must be dict \
-instead of {type(other_config)}"
+                f"type of other_config must be dict "
+                f"instead of {type(other_config)}"
             )
         other_config_key_set: set = set(other_config.keys())
         for key in self.needed_other_config_key_set:
@@ -152,6 +152,7 @@ instead of {type(other_config)}"
             )
 
         color_matrix: str = get_color_matrix(width=width, height=height)
+
         color_primaries_param: str = "--colorprim"
         color_primaries_param_value: str = (
             "bt709"
@@ -220,10 +221,11 @@ in {self.bt2020_available_bit_depth_set}",
                 param_value == limited_range_param_value
                 and self._output_full_range_bool
             ):
-                warning_str: str = f"whether to output full range yuv is \
-different between config output_full_range_bool \
-{self._output_full_range_bool} and x265 cmd param {param_value}. \
-It may cause inferior output video quality!"
+                warning_str: str = f"whether to output full range yuv is "
+                f"different between config output_full_range_bool "
+                f"f{self._output_full_range_bool} "
+                f"and x265 cmd param {param_value}. "
+                f"It may cause inferior output video quality!"
                 g_logger.log(logging.WARNING, warning_str)
                 warnings.warn(warning_str, RuntimeWarning)
         else:

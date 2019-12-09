@@ -82,7 +82,10 @@ class RepeatableTrack(Track):
             )
         if duration_ms <= 0 and duration_ms != -1:
             raise RangeError(
-                message=f"value of duration_ms must in (0,inf) and -1",
+                message=(
+                    f"value of duration_ms must in (0,inf) and -1 "
+                    f"instead of {duration_ms}"
+                ),
                 valid_range=f"(0,inf) and -1",
             )
         self.duration_ms = duration_ms

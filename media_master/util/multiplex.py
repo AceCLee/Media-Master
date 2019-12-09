@@ -234,14 +234,14 @@ instead of {type(mkvmerge_exe_file_dir)}"
         all_filename_list: list = os.listdir(mkvmerge_exe_file_dir)
         if mkvmerge_exe_filename not in all_filename_list:
             raise FileNotFoundError(
-                f"{mkvmerge_exe_filename} cannot be found in \
-{mkvmerge_exe_file_dir}"
+                f"{mkvmerge_exe_filename} cannot be found in "
+                f"{mkvmerge_exe_file_dir}"
             )
     else:
         if not check_file_environ_path({mkvmerge_exe_filename}):
             raise FileNotFoundError(
-                f"{mkvmerge_exe_filename} cannot be found in \
-environment path"
+                f"{mkvmerge_exe_filename} cannot be found in "
+                "environment path"
             )
     if not os.path.exists(output_file_dir):
         os.makedirs(output_file_dir)

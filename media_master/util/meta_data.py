@@ -65,7 +65,7 @@ def get_proper_frame_rate(
 
 
 def reliable_meta_data(
-    input_filename: str, media_info_data: dict, lowest_mkvmerge_version=20
+    input_filename: str, media_info_data: dict, lowest_mkvmerge_version=5
 ):
     mkv_extension: str = ".mkv"
     m2ts_extension: str = ".m2ts"

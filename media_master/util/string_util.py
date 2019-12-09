@@ -1,5 +1,5 @@
 """
-    sort.py sort module of media_master
+    string_util.py string module of media_master
     Copyright (C) 2019  Ace C Lee
 
     This program is free software: you can redistribute it and/or modify
@@ -16,23 +16,20 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-from ..error import RangeError
+import string
 
 
-def resort(src, order_list):
-    if len(order_list) > len(src):
-        raise ValueError(
-            f"len(order_list) > len(src) {len(order_list)} > {len(src)}"
-        )
-    if any(index not in order_list for index in range(len(order_list))):
-        RangeError(
-            message=(
-                f"index of src must be in {list(range(len(order_list)))}"
-            ),
-            valid_range=str(list(range(len(order_list)))),
-        )
-    if len(order_list) < len(src):
-        order_list += list(range(len(order_list), len(src)))
-    return sorted(src, key=lambda x: order_list[src.index(x)])
+def is_ascii(s):
+    return all(ord(c) < 128 for c in s)
+
+
+def is_printable(s):
+    printable = set(string.printable)
+    return all(c in printable for c in s)
+
+
+def get_printable(s):
+    printable = set(string.printable)
+    return "".join(filter(lambda x: x in printable, s))
 
 

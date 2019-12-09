@@ -45,7 +45,12 @@ from .util import (
     copy_video,
     get_proper_frame_rate,
     resort,
+    is_template,
+    is_printable,
+    get_printable,
 )
+
+
 from .video import (
     SegmentedConfigX265VspipeTranscoding,
     GopX265VspipeVideoTranscoding,
@@ -120,11 +125,14 @@ class CompleteVideoTranscoding(object):
             )
             self._input_video_filepath = new_input_filepath
 
-    def _audio_transcode(self, audio_track_file_list: list) -> list:
+    def _audio_transcode(
+        self, audio_track_file_list: list, filename_suffix=""
+    ) -> list:
         transcoded_audio_track_file_list: list = []
         for index, audio_track_file in enumerate(audio_track_file_list):
             transcoded_audio_filename: str = (
-                self._output_video_filename + f"_audio_index_{index}"
+                self._output_video_filename
+                + f"{filename_suffix}_audio_index_{index}"
             )
             if self._config.audio_transcoding_method == "opus":
                 transcoded_audio_filepath: str = transcode_audio_opus(
@@ -162,13 +170,24 @@ class CompleteVideoTranscoding(object):
                 transcoded_audio_track_file
             )
 
-            return transcoded_audio_track_file_list
+            if self._config.internal_audio_track_to_process == "default":
+                continue
+            elif self._config.internal_audio_track_to_process == "all":
+                pass
+            else:
+                raise RuntimeError("It's impossible to execute this code.")
+
+        return transcoded_audio_track_file_list
 
     def _audio_process(self):
         internal_audio_process_available_option_set: set = {
             "copy",
             "transcode",
             "skip",
+        }
+        internal_audio_track_to_process_available_option_set: set = {
+            "default",
+            "all",
         }
         external_audio_process_available_option_set: set = {
             "copy",
@@ -185,6 +204,19 @@ class CompleteVideoTranscoding(object):
                     f"{self._config.internal_audio_process_option}"
                 ),
                 valid_range=str(internal_audio_process_available_option_set),
+            )
+        if (
+            self._config.internal_audio_track_to_process
+            not in internal_audio_track_to_process_available_option_set
+        ):
+            raise RangeError(
+                message=(
+                    f"Unknown internal_audio_process_option: "
+                    f"{self._config.internal_audio_track_to_process}"
+                ),
+                valid_range=str(
+                    internal_audio_track_to_process_available_option_set
+                ),
             )
         if (
             self._config.external_audio_process_option
@@ -274,9 +306,11 @@ class CompleteVideoTranscoding(object):
                 external_audio_track_file_list.append(audio_track_file)
 
         output_internal_audio_track_file_list: list = []
-        if self._config.internal_audio_process_option == "transcode":
+        if not internal_audio_track_file_list:
+            pass
+        elif self._config.internal_audio_process_option == "transcode":
             output_internal_audio_track_file_list += self._audio_transcode(
-                internal_audio_track_file_list
+                internal_audio_track_file_list, filename_suffix="_internal"
             )
         elif self._config.internal_audio_process_option == "copy":
             output_internal_audio_track_file_list += (
@@ -291,7 +325,7 @@ class CompleteVideoTranscoding(object):
         if external_audio_track_file_list:
             if self._config.external_audio_process_option == "transcode":
                 output_external_audio_track_file_list += self._audio_transcode(
-                    external_audio_track_file_list
+                    external_audio_track_file_list, filename_suffix="_external"
                 )
             elif self._config.external_audio_process_option == "copy":
                 output_external_audio_track_file_list += (
@@ -649,7 +683,11 @@ class CompleteVideoTranscoding(object):
                 ),
                 None,
             )
-            frame_count: int = int(video_info_dict["frame_count"])
+            frame_count: int = int(
+                video_info_dict["source_frame_count"]
+                if "source_frame_count" in video_info_dict.keys()
+                else video_info_dict["frame_count"]
+            )
             if 0 < abs(frame_count - self._video_track_file.frame_count) < 3:
                 cnt_ne_str: str = (
                     f"transcode warning: "
@@ -1194,6 +1232,57 @@ main logger {main_logger} successfully."
                                 index
                             ][key]
                         ]
+
+        if not is_printable(mission_config["cache_dir"]):
+            old_cache_dir = mission_config["cache_dir"]
+            mission_config["cache_dir"] = get_printable(
+                mission_config["cache_dir"]
+            )
+            warning_str: str = (
+                f"pre-check: there is unprintable char in "
+                f"cache_dir: {old_cache_dir} ,"
+                f"replace to {mission_config['cache_dir']}"
+            )
+            g_logger.log(logging.WARNING, warning_str)
+            warnings.warn(warning_str, RuntimeWarning)
+
+        if mission_config["type"] == "series":
+            if not is_printable(
+                mission_config["output_video_name_template_str"]
+            ):
+                old_output_video_name_template_str = mission_config[
+                    "output_video_name_template_str"
+                ]
+                mission_config[
+                    "output_video_name_template_str"
+                ] = get_printable(
+                    mission_config["output_video_name_template_str"]
+                )
+                warning_str: str = (
+                    f"pre-check: there is unprintable char in "
+                    f"output_video_name_template_str: "
+                    f"{old_output_video_name_template_str} ,"
+                    f"replace to "
+                    f"{mission_config['output_video_name_template_str']}"
+                )
+                g_logger.log(logging.WARNING, warning_str)
+                warnings.warn(warning_str, RuntimeWarning)
+
+        if mission_config["type"] == "single":
+            if not is_printable(mission_config["output_video_name"]):
+                old_output_video_name = mission_config["output_video_name"]
+                mission_config["output_video_name"] = get_printable(
+                    mission_config["output_video_name"]
+                )
+                warning_str: str = (
+                    f"pre-check: there is unprintable char in "
+                    f"output_video_name: "
+                    f"{old_output_video_name} ,"
+                    f"replace to "
+                    f"{mission_config['output_video_name']}"
+                )
+                g_logger.log(logging.WARNING, warning_str)
+                warnings.warn(warning_str, RuntimeWarning)
 
         Config: namedtuple = namedtuple("Config", sorted(mission_config))
         mission_config: namedtuple = Config(**mission_config)

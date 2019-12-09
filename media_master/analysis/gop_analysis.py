@@ -134,7 +134,8 @@ already existed, skip analysis."
 
     print(start_info_str, file=sys.stderr)
     g_logger.log(logging.INFO, start_info_str)
-
+    
+    
     process = subprocess.Popen(args_list, shell=True)
 
     return_code = process.wait()
@@ -245,6 +246,7 @@ def save_high_bitrate_gop_info(
         mean: float = frame_df["pkt_size"][index:next_index].values.mean()
         frame_df.iloc[index, 2] = mean
         frame_df.iloc[index, 3] = int(next_index)
+        
 
     output_list: list = []
     for key in config["multiple_config"].keys():
@@ -260,7 +262,7 @@ def save_high_bitrate_gop_info(
             re_result = re.search(re_exp, key)
             multiple_min = float(re_result.group(1))
             multiple_max = float(re_result.group(2))
-
+        
         if multiple_max != -1:
             if multiple_min == 0:
                 multiple_min = 0.01
