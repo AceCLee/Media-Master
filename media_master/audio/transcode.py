@@ -23,6 +23,8 @@ import re
 import subprocess
 import sys
 
+from pymediainfo import MediaInfo
+
 from ..error import DirNotFoundError, RangeError
 from ..util import check_file_environ_path, replace_param_template_list
 
@@ -31,45 +33,59 @@ g_logger.propagate = True
 g_logger.setLevel(logging.DEBUG)
 
 
-def transcode_audio_wav_2_flac(
+def get_input_audio_info(audio_filepath: str) -> dict:
+    media_info_list: list = MediaInfo.parse(audio_filepath).to_data()["tracks"]
+    audio_info_dict: dict = next(
+        (track for track in media_info_list if track["track_type"] == "Audio"),
+        None,
+    )
+
+    bit_depth: int = int(
+        audio_info_dict["bit_depth"]
+    ) if "bit_depth" in audio_info_dict.keys() else 16
+
+    info_dict: dict = dict(bit_depth=bit_depth)
+
+    return info_dict
+
+
+def transcode_audio_flac(
     input_audio_filepath: str,
     output_audio_dir: str,
     output_audio_name: str,
     flac_exe_cmd_param_template: list,
     delete_input_file_bool=False,
     flac_exe_file_dir="",
+    ffmpeg_exe_file_dir="",
 ) -> str:
-    wav_extension: str = ".wav"
-    if not input_audio_filepath.endswith(wav_extension):
-        raise RuntimeError(f"input file must be wav file.")
     if not isinstance(input_audio_filepath, str):
         raise TypeError(
-            f"type of input_audio_filepath must be str \
-instead of {type(input_audio_filepath)}"
+            f"type of input_audio_filepath must be str "
+            f"instead of {type(input_audio_filepath)}"
         )
 
     if not isinstance(output_audio_dir, str):
         raise TypeError(
-            f"type of output_audio_dir must be str \
-instead of {type(output_audio_dir)}"
+            f"type of output_audio_dir must be str "
+            f"instead of {type(output_audio_dir)}"
         )
 
     if not isinstance(output_audio_name, str):
         raise TypeError(
-            f"type of output_audio_name must be str \
-instead of {type(output_audio_name)}"
+            f"type of output_audio_name must be str "
+            f"instead of {type(output_audio_name)}"
         )
 
     if not isinstance(flac_exe_cmd_param_template, list):
         raise TypeError(
-            f"type of flac_exe_cmd_param_template must be list \
-instead of {type(flac_exe_cmd_param_template)}"
+            f"type of flac_exe_cmd_param_template must be list "
+            f"instead of {type(flac_exe_cmd_param_template)}"
         )
 
     if not isinstance(flac_exe_file_dir, str):
         raise TypeError(
-            f"type of flac_exe_file_dir must be str \
-instead of {type(flac_exe_file_dir)}"
+            f"type of flac_exe_file_dir must be str "
+            f"instead of {type(flac_exe_file_dir)}"
         )
     if not os.path.exists(input_audio_filepath):
         raise FileNotFoundError(
@@ -87,29 +103,58 @@ instead of {type(flac_exe_file_dir)}"
         for flac_exe_name in flac_exe_name_set:
             if flac_exe_name not in all_filename_list:
                 raise FileNotFoundError(
-                    f"{flac_exe_name} cannot be found in \
-{flac_exe_file_dir}"
+                    f"{flac_exe_name} cannot be found in "
+                    f"{flac_exe_file_dir}"
                 )
     else:
         if not check_file_environ_path(flac_exe_name_set):
             raise FileNotFoundError(
-                f"at least one of {flac_exe_name_set} cannot \
-be found in environment path"
+                f"at least one of {flac_exe_name_set} cannot "
+                f"be found in environment path"
+            )
+
+    ffmpeg_exe_name: str = "ffmpeg.exe"
+    ffmpeg_exe_name_set: set = {ffmpeg_exe_name}
+    if ffmpeg_exe_file_dir:
+        if not os.path.isdir(ffmpeg_exe_file_dir):
+            raise DirNotFoundError(
+                f"ffmpeg dir cannot be found with {ffmpeg_exe_file_dir}"
+            )
+        all_filename_list: list = os.listdir(ffmpeg_exe_file_dir)
+        for ffmpeg_exe_name in ffmpeg_exe_name_set:
+            if ffmpeg_exe_name not in all_filename_list:
+                raise FileNotFoundError(
+                    f"{ffmpeg_exe_name} cannot be found in "
+                    f"{ffmpeg_exe_file_dir}"
+                )
+    else:
+        if not check_file_environ_path(ffmpeg_exe_name_set):
+            raise FileNotFoundError(
+                f"at least one of {ffmpeg_exe_name_set} cannot "
+                f"be found in environment path"
             )
     if not os.path.exists(output_audio_dir):
         os.makedirs(output_audio_dir)
 
-    flac_suffix: str = ".flac"
-    output_audio_fullname: str = output_audio_name + flac_suffix
+    flac_extension: str = ".flac"
+    output_audio_fullname: str = output_audio_name + flac_extension
     output_filepath: str = os.path.join(
         output_audio_dir, output_audio_fullname
     )
+
     flac_exe_filepath: str = os.path.join(flac_exe_file_dir, flac_exe_name)
+    ffmpeg_exe_filepath: str = os.path.join(
+        ffmpeg_exe_file_dir, ffmpeg_exe_name
+    )
+
+    info_dict: dict = get_input_audio_info(input_audio_filepath)
 
     program_param_dict = {
+        "ffmpeg_exe_filepath": ffmpeg_exe_filepath,
         "flac_exe_filepath": flac_exe_filepath,
         "input_audio_filepath": input_audio_filepath,
         "output_filepath": output_filepath,
+        "ffmpeg_wav_audio_codec": f"pcm_s{info_dict['bit_depth']}le",
     }
 
     flac_exe_cmd_param = replace_param_template_list(
@@ -125,10 +170,12 @@ be found in environment path"
 
     print(start_info_str, file=sys.stderr)
     g_logger.log(logging.INFO, start_info_str)
-    
-    process: subprocess.Popen = subprocess.Popen(flac_exe_cmd_param)
 
-    process.wait()
+    process: subprocess.Popen = subprocess.Popen(
+        flac_exe_cmd_param, shell=True
+    )
+
+    process.communicate()
 
     if process.returncode == 0:
         end_info_str: str = (
@@ -154,35 +201,36 @@ be found in environment path"
     return output_filepath
 
 
-def transcode_audio_flac_ffmpeg(
+def transcode_audio_ffmpeg(
     input_audio_filepath: str,
     output_audio_dir: str,
     output_audio_name: str,
+    output_extension: str,
     delete_input_file_bool=False,
     ffmpeg_exe_file_dir="",
 ) -> str:
     if not isinstance(input_audio_filepath, str):
         raise TypeError(
-            f"type of input_audio_filepath must be str \
-instead of {type(input_audio_filepath)}"
+            f"type of input_audio_filepath must be str "
+            f"instead of {type(input_audio_filepath)}"
         )
 
     if not isinstance(output_audio_dir, str):
         raise TypeError(
-            f"type of output_audio_dir must be str \
-instead of {type(output_audio_dir)}"
+            f"type of output_audio_dir must be str "
+            f"instead of {type(output_audio_dir)}"
         )
 
     if not isinstance(output_audio_name, str):
         raise TypeError(
-            f"type of output_audio_name must be str \
-instead of {type(output_audio_name)}"
+            f"type of output_audio_name must be str "
+            f"instead of {type(output_audio_name)}"
         )
 
     if not isinstance(ffmpeg_exe_file_dir, str):
         raise TypeError(
-            f"type of ffmpeg_exe_file_dir must be str \
-instead of {type(ffmpeg_exe_file_dir)}"
+            f"type of ffmpeg_exe_file_dir must be str "
+            f"instead of {type(ffmpeg_exe_file_dir)}"
         )
     if not os.path.isfile(input_audio_filepath):
         raise FileNotFoundError(
@@ -198,8 +246,8 @@ instead of {type(ffmpeg_exe_file_dir)}"
         all_filename_list: list = os.listdir(ffmpeg_exe_file_dir)
         if ffmpeg_exe_filename not in all_filename_list:
             raise FileNotFoundError(
-                f"{ffmpeg_exe_filename} cannot be found in \
-{ffmpeg_exe_file_dir}"
+                f"{ffmpeg_exe_filename} cannot be found in "
+                f"{ffmpeg_exe_file_dir}"
             )
     else:
         if not check_file_environ_path({ffmpeg_exe_filename}):
@@ -209,8 +257,7 @@ instead of {type(ffmpeg_exe_file_dir)}"
     if not os.path.isdir(output_audio_dir):
         os.makedirs(output_audio_dir)
 
-    flac_suffix: str = ".flac"
-    audio_filename: str = output_audio_name + flac_suffix
+    audio_filename: str = output_audio_name + output_extension
     output_audio_filepath: str = os.path.join(output_audio_dir, audio_filename)
 
     ffmpeg_exe_filepath: str = os.path.join(
@@ -221,72 +268,48 @@ instead of {type(ffmpeg_exe_file_dir)}"
     overwrite_key: str = "-y"
     output_value: str = output_audio_filepath
 
-    args_list: list = [
-        ffmpeg_exe_filepath,
-        input_key,
-        input_value,
-        overwrite_key,
-        output_value,
-    ]
+    args_list: list = [ffmpeg_exe_filepath, input_key, input_value]
 
-    param_debug_str: str = f"audio flac: param:\
-{subprocess.list2cmdline(args_list)}"
+    info_dict: dict = get_input_audio_info(input_audio_filepath)
+
+    if info_dict["bit_depth"] > 16 and output_extension == ".wav":
+        args_list += ["-codec:a", f"pcm_s{info_dict['bit_depth']}le"]
+
+    args_list += [overwrite_key, output_value]
+
+    param_debug_str: str = (
+        f"transcode audio: param:" f"{subprocess.list2cmdline(args_list)}"
+    )
     g_logger.log(logging.DEBUG, param_debug_str)
 
-    start_info_str: str = f"audio flac: transcode {input_audio_filepath} to \
-{output_audio_filepath}"
+    start_info_str: str = (
+        f"transcode audio: transcode {input_audio_filepath} to "
+        f"{output_audio_filepath}"
+    )
     print(start_info_str, file=sys.stderr)
     g_logger.log(logging.INFO, start_info_str)
-    
-    
-    process: subprocess.Popen = subprocess.Popen(
-        args=args_list, stderr=subprocess.PIPE, text=True, encoding="utf-8"
-    )
 
-    
-    ffmpeg_stderr_re_exp: str = "size= *(\\d+)kB time=(\\d{2}):(\\d{2}):(\\d{2}).(\\d{2}) \
-bitrate=(\\d+\\.\\d{1})kbits/s"
+    process: subprocess.Popen = subprocess.Popen(args=args_list)
 
-    bitrate: float = 0.0
-    while process.poll() is None:
-        current_line: str = process.stderr.readline()
-        ffmpeg_stderr_re_result: re.Match = re.search(
-            ffmpeg_stderr_re_exp, current_line
-        )
-
-        if ffmpeg_stderr_re_result:
-            size_mb: float = int(ffmpeg_stderr_re_result.group(1)) / 1024
-            hour: int = int(ffmpeg_stderr_re_result.group(2))
-            minute: int = int(ffmpeg_stderr_re_result.group(3))
-            second: int = int(ffmpeg_stderr_re_result.group(4))
-            ten_milisecond: int = int(ffmpeg_stderr_re_result.group(5))
-            bitrate: float = float(ffmpeg_stderr_re_result.group(6))
-            
-            print(
-                f"\rTranscoding flac ... Size: {size_mb:.2f}MB \
-Time: {hour:0>2}:{minute:0>2}:{second:0>2}.\
-{ten_milisecond:0>2} Bitrate: {bitrate:.2f}kbit/s",
-                end="",
-                file=sys.stderr,
-            )
-
-    print("\n", end="", file=sys.stderr)
+    process.communicate()
 
     if process.returncode == 0:
-        end_info_str: str = f"audio flac: transcode {input_audio_filepath} to \
-{output_audio_filepath} successfully."
+        end_info_str: str = (
+            f"transcode audio: transcode {input_audio_filepath} to "
+            f"{output_audio_filepath} successfully."
+        )
         print(end_info_str, file=sys.stderr)
         g_logger.log(logging.INFO, end_info_str)
     else:
         raise ChildProcessError(
-            f"audio flac: transcode {input_audio_filepath} to \
-{output_audio_filepath} unsuccessfully!"
+            f"transcode audio: transcode {input_audio_filepath} to "
+            f"{output_audio_filepath} unsuccessfully!"
         )
-    
+
     if delete_input_file_bool and not os.path.samefile(
         input_audio_filepath, output_audio_filepath
     ):
-        delete_info_str: str = f"audio flac: delete {input_audio_filepath}"
+        delete_info_str: str = f"transcode audio: delete {input_audio_filepath}"
 
         print(delete_info_str, file=sys.stderr)
         g_logger.log(logging.INFO, delete_info_str)
@@ -405,19 +428,18 @@ be found in environment path"
         )
     if not os.path.exists(output_audio_dir):
         os.makedirs(output_audio_dir)
-    
-    opusenc_unsupport_suffix_set: set = {".aac", ".ac3", ".mp3"}
+
+    opusenc_support_suffix_set: set = {".opus", ".flac", ".wav"}
     input_audio_filename: str = os.path.basename(input_audio_filepath)
-    opusenc_unsupport_bool: bool = any(
-        input_audio_filename.endswith(unsupport_suffix)
-        for unsupport_suffix in opusenc_unsupport_suffix_set
-    )
+    input_audio_filename_ext: str = os.path.splitext(input_audio_filename)[1]
+    opusenc_unsupport_bool: bool = input_audio_filename_ext not in opusenc_support_suffix_set
     if opusenc_unsupport_bool:
-        
-        input_audio_filepath = transcode_audio_flac_ffmpeg(
-            input_audio_filepath,
-            output_audio_dir,
-            output_audio_name,
+
+        input_audio_filepath = transcode_audio_ffmpeg(
+            input_audio_filepath=input_audio_filepath,
+            output_audio_dir=output_audio_dir,
+            output_audio_name=output_audio_name,
+            output_extension=".flac",
             delete_input_file_bool=delete_input_file_bool,
             ffmpeg_exe_file_dir=ffmpeg_exe_file_dir,
         )
@@ -435,8 +457,6 @@ be found in environment path"
     opusdec_exe_filepath: str = os.path.join(
         opus_exe_file_dir, opusdec_exe_name
     )
-    
-    
 
     input_opus_bool: bool = input_audio_filepath.endswith(opus_suffix)
     current_opus_exe_config_list: list = []
@@ -456,7 +476,6 @@ be found in environment path"
 
     program_param_dict = {
         "opusenc_exe_filepath": opusenc_exe_filepath,
-        
         "input_audio_filepath": input_audio_filepath
         if not input_opus_bool
         else "-",
@@ -475,7 +494,7 @@ be found in environment path"
 
     print(start_info_str, file=sys.stderr)
     g_logger.log(logging.INFO, start_info_str)
-    
+
     process: subprocess.Popen = subprocess.Popen(
         current_opus_exe_config_list,
         stderr=subprocess.PIPE,
@@ -484,11 +503,9 @@ be found in environment path"
         encoding="utf-8",
     )
 
-    
-    
     opusenc_infor_re_exp: str = "(\\d{1,3})% \
     (\\d{2}):(\\d{2}):(\\d{2})\\.(\\d{2}).*?(\\d+\\.{0,1}\\d{0,1}) kbit/s"
-    
+
     opusdec_enc_time_infor_re_exp: str = r"(\d{2}):(\d{2}):(\d{2})"
     opusdec_enc_infor_re_exp: str = (
         r"(\d{2}):(\d{2}):(\d{2}).*?(\d+\.{0,1}\d{0,1}) kbit/s"
@@ -514,7 +531,7 @@ be found in environment path"
             second = int(opusenc_infor_re_result.group(4))
             ten_milisecond = int(opusenc_infor_re_result.group(5))
             bitrate = float(opusenc_infor_re_result.group(6))
-            
+
             print(
                 f"\rTranscoding opus ... Percent: {percent:.2f}% \
 Time: {hour:0>2}:{minute:0>2}:{second:0>2}.\
@@ -587,38 +604,38 @@ def transcode_audio_qaac(
 ) -> str:
     if not isinstance(input_audio_filepath, str):
         raise TypeError(
-            f"type of input_audio_filepath must be str \
-instead of {type(input_audio_filepath)}"
+            f"type of input_audio_filepath must be str "
+            f"instead of {type(input_audio_filepath)}"
         )
 
     if not isinstance(output_audio_dir, str):
         raise TypeError(
-            f"type of output_audio_dir must be str \
-instead of {type(output_audio_dir)}"
+            f"type of output_audio_dir must be str "
+            f"instead of {type(output_audio_dir)}"
         )
 
     if not isinstance(output_audio_name, str):
         raise TypeError(
-            f"type of output_audio_name must be str \
-instead of {type(output_audio_name)}"
+            f"type of output_audio_name must be str "
+            f"instead of {type(output_audio_name)}"
         )
 
     if not isinstance(qaac_exe_cmd_param_template, list):
         raise TypeError(
-            f"type of qaac_exe_cmd_param_template must be list \
-instead of {type(qaac_exe_cmd_param_template)}"
+            f"type of qaac_exe_cmd_param_template must be list "
+            f"instead of {type(qaac_exe_cmd_param_template)}"
         )
 
     if not isinstance(qaac_exe_file_dir, str):
         raise TypeError(
-            f"type of qaac_exe_file_dir must be str \
-instead of {type(qaac_exe_file_dir)}"
+            f"type of qaac_exe_file_dir must be str "
+            f"instead of {type(qaac_exe_file_dir)}"
         )
 
     if not isinstance(ffmpeg_exe_file_dir, str):
         raise TypeError(
-            f"type of ffmpeg_exe_file_dir must be str \
-instead of {type(ffmpeg_exe_file_dir)}"
+            f"type of ffmpeg_exe_file_dir must be str "
+            f"instead of {type(ffmpeg_exe_file_dir)}"
         )
     if not os.path.exists(input_audio_filepath):
         raise FileNotFoundError(
@@ -636,14 +653,14 @@ instead of {type(ffmpeg_exe_file_dir)}"
         for qaac_exe_name in qaac_exe_name_set:
             if qaac_exe_name not in all_filename_list:
                 raise FileNotFoundError(
-                    f"{qaac_exe_name} cannot be found in \
-{qaac_exe_file_dir}"
+                    f"{qaac_exe_name} cannot be found in "
+                    f"{qaac_exe_file_dir}"
                 )
     else:
         if not check_file_environ_path(qaac_exe_name_set):
             raise FileNotFoundError(
-                f"at least one of {qaac_exe_name_set} cannot \
-be found in environment path"
+                f"at least one of {qaac_exe_name_set} cannot "
+                f"be found in environment path"
             )
 
     ffmpeg_exe_filename: str = "ffmpeg.exe"
@@ -655,8 +672,8 @@ be found in environment path"
         all_filename_list: list = os.listdir(ffmpeg_exe_file_dir)
         if ffmpeg_exe_filename not in all_filename_list:
             raise FileNotFoundError(
-                f"{ffmpeg_exe_filename} cannot be found in \
-{ffmpeg_exe_file_dir}"
+                f"{ffmpeg_exe_filename} cannot be found in "
+                f"{ffmpeg_exe_file_dir}"
             )
     else:
         if not check_file_environ_path({ffmpeg_exe_filename}):
@@ -666,8 +683,8 @@ be found in environment path"
     if not os.path.exists(output_audio_dir):
         os.makedirs(output_audio_dir)
 
-    qaac_suffix: str = ".aac"
-    output_audio_fullname: str = output_audio_name + qaac_suffix
+    qaac_extension: str = ".aac"
+    output_audio_fullname: str = output_audio_name + qaac_extension
     output_filepath: str = os.path.join(
         output_audio_dir, output_audio_fullname
     )
@@ -677,11 +694,14 @@ be found in environment path"
     )
     qaac_exe_filepath: str = os.path.join(qaac_exe_file_dir, qaac_exe_name)
 
+    info_dict: dict = get_input_audio_info(input_audio_filepath)
+
     program_param_dict = {
         "ffmpeg_exe_filepath": ffmpeg_exe_filepath,
         "qaac_exe_filepath": qaac_exe_filepath,
         "input_audio_filepath": input_audio_filepath,
         "output_filepath": output_filepath,
+        "ffmpeg_wav_audio_codec": f"pcm_s{info_dict['bit_depth']}le",
     }
 
     qaac_exe_cmd_param = replace_param_template_list(
@@ -696,7 +716,7 @@ be found in environment path"
 
     print(start_info_str, file=sys.stderr)
     g_logger.log(logging.INFO, start_info_str)
-    
+
     process: subprocess.Popen = subprocess.Popen(
         qaac_exe_cmd_param, shell=True
     )
@@ -775,7 +795,7 @@ instead of {type(flac_exe_file_dir)}"
         "--output-name",
         output_filepath,
     ]
-    
+
     process = subprocess.Popen(
         args_list,
         stdout=subprocess.PIPE,
@@ -794,5 +814,3 @@ instead of {type(flac_exe_file_dir)}"
         raise ChildProcessError(
             "decode {} unsuccessfully.".format(output_filepath)
         )
-
-

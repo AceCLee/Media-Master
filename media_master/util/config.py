@@ -23,8 +23,8 @@ import os
 def load_config(config_json_filepath):
     if not isinstance(config_json_filepath, str):
         raise TypeError(
-            f"type of config_json_filepath must be str \
-instead of {type(config_json_filepath)}"
+            f"type of config_json_filepath must be str "
+            f"instead of {type(config_json_filepath)}"
         )
     if not os.path.isfile(config_json_filepath):
         raise FileNotFoundError(
@@ -43,19 +43,19 @@ instead of {type(config_json_filepath)}"
 def save_config(config_json_filepath: str, config_dict: dict):
     if not isinstance(config_json_filepath, str):
         raise TypeError(
-            f"type of config_json_filepath must be str \
-instead of {type(config_json_filepath)}"
+            f"type of config_json_filepath must be str "
+            f"instead of {type(config_json_filepath)}"
         )
     if not isinstance(config_dict, dict):
         raise TypeError(
-            f"type of config_dict must be dict \
-instead of {type(config_dict)}"
+            f"type of config_dict must be dict "
+            f"instead of {type(config_dict)}"
         )
     config_json_dir = os.path.dirname(config_json_filepath)
     if not os.path.isdir(config_json_dir):
         os.makedirs(config_json_dir)
     with open(config_json_filepath, "w", encoding="utf-8") as file:
-        file.write(json.dumps(config_dict, indent=2, ensure_ascii=False))
+        file.write(json.dumps(config_dict, indent=4, ensure_ascii=False))
 
 
 

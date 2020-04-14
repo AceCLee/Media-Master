@@ -1,5 +1,5 @@
 """
-    name_hash.py name hash module of media_master
+    subtitle_check.py subtitle check module of media_master
     Copyright (C) 2019  Ace C Lee
 
     This program is free software: you can redistribute it and/or modify
@@ -16,11 +16,21 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-import hashlib
+import os
 
 
-def hash_name(string: str, output_size_in_byte=3):
-    blake_hash = hashlib.blake2b(
-        string.encode("utf-8"), digest_size=output_size_in_byte
-    )
-    return blake_hash.hexdigest()
+def ass_check(subtitle_dir: str, encoding="utf-8-sig"):
+    valid_identifier: str = "[Script Info]"
+    ass_extension: str = ".ass"
+    subtitle_filename_list = []
+    for filename in os.listdir(subtitle_dir):
+        if filename.endswith(ass_extension):
+            subtitle_filename_list.append(filename)
+    for filename in subtitle_filename_list:
+        filepath = os.path.join(subtitle_dir, filename)
+        with open(filepath, mode="r", encoding=encoding) as f:
+            text: str = f.read()
+            if not text.startswith(valid_identifier):
+                print(filename)
+
+

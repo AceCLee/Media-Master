@@ -365,34 +365,3 @@ def save_series_high_bitrate_gop_info(
         save_config(all_gop_info_json_filepath, all_gop_info_dict)
 
 
-if __name__ == "__main__":
-    config: dict = dict(
-        first_frame_index_key="",
-        last_frame_index_key="",
-        video_transcoding_cmd_param_template_key="",
-        frame_server_template_filepath_key="",
-        frame_interval_list_key="",
-        multiple_config={
-            "1~1.5": dict(
-                video_transcoding_cmd_param_template_value="",
-                frame_server_template_filepath_value="",
-            ),
-            "1.5~2": dict(
-                video_transcoding_cmd_param_template_value="",
-                frame_server_template_filepath_value="",
-            ),
-            "2~2.5": dict(
-                video_transcoding_cmd_param_template_value="",
-                frame_server_template_filepath_value="",
-            ),
-            "2.5~3": dict(
-                video_transcoding_cmd_param_template_value="",
-                frame_server_template_filepath_value="",
-            ),
-            "3~": dict(
-                video_transcoding_cmd_param_template_value="",
-                frame_server_template_filepath_value="",
-            ),
-        },
-    )
-    minimum_gop_length = 300

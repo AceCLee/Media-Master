@@ -34,8 +34,8 @@ def replace_config_template_dict(
     modified_config_dict: dict = copy.deepcopy(config_dict)
     for key in modified_config_dict.keys():
         value = str(modified_config_dict[key])
-        re_result = re.fullmatch(param_re_exp, value)
-        if re_result:
+        re_result = re.fullmatch(param_re_exp, str(value))
+        if re_result and re_result.group(1) in program_param_dict.keys():
             modified_config_dict[key] = program_param_dict[re_result.group(1)]
     return modified_config_dict
 
@@ -45,8 +45,8 @@ def replace_param_template_list(
 ):
     modified_param_list: dict = copy.deepcopy(param_list)
     for index, param in enumerate(modified_param_list):
-        re_result = re.fullmatch(param_re_exp, param)
-        if re_result:
+        re_result = re.fullmatch(param_re_exp, str(param))
+        if re_result and re_result.group(1) in program_param_dict.keys():
             modified_param_list[index] = program_param_dict[re_result.group(1)]
     return modified_param_list
 

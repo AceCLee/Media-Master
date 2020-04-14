@@ -1,6 +1,6 @@
 """
-    name_hash.py name hash module of media_master
-    Copyright (C) 2019  Ace C Lee
+    fraction.py fraction module of media info
+    Copyright (C) 2020  Ace C Lee
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -16,11 +16,10 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-import hashlib
+from fractions import Fraction
 
 
-def hash_name(string: str, output_size_in_byte=3):
-    blake_hash = hashlib.blake2b(
-        string.encode("utf-8"), digest_size=output_size_in_byte
-    )
-    return blake_hash.hexdigest()
+def get_reduced_fraction(numerator: int, denominator: int):
+    fraction: Fraction = Fraction(numerator=numerator, denominator=denominator)
+    return dict(numerator=fraction.numerator, denominator=fraction.denominator)
+

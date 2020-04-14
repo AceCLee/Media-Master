@@ -36,6 +36,9 @@ def check_file_environ_path(filename_set: set) -> bool:
         all_filename_set |= (
             set(os.listdir(path_dir)) if os.path.isdir(path_dir) else set()
         )
-    return all(filename in all_filename_set for filename in filename_set)
+    all_filename_set = set(filename.lower() for filename in all_filename_set)
+    return all(
+        filename.lower() in all_filename_set for filename in filename_set
+    )
 
 

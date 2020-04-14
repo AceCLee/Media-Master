@@ -17,9 +17,11 @@
 """
 
 from ..error import RangeError
+import copy
 
 
 def resort(src, order_list):
+    order_list = copy.deepcopy(order_list)
     if len(order_list) > len(src):
         raise ValueError(
             f"len(order_list) > len(src) {len(order_list)} > {len(src)}"
