@@ -1,6 +1,6 @@
 # Media Master
 
-You transcode videos with your vapoursynth script template with Media Master.
+You transcode videos with your vapoursynth script template via Media Master.
 
 If you want to transcode many videos with flexibility automatically, you should use it.
 
