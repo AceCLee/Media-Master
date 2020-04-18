@@ -59,6 +59,8 @@ from .util import (
     get_stream_order,
     extract_mkv_video_timecode,
     get_proper_color_specification,
+    is_iso_language,
+    global_constant,
 )
 from .video import (
     GopX265VspipeVideoTranscoding,
@@ -1653,6 +1655,429 @@ class SeriesVideoTranscoding(object):
             g_logger.log(logging.INFO, end_info_str)
 
 
+def is_available_language(language: str) -> bool:
+    language = str(language)
+    if not language:
+        return True
+    else:
+        return is_iso_language(language)
+
+
+def config_pre_check(one_mission_config: dict, all_output_filepath_set: set):
+    config: dict = one_mission_config
+    if config["type"] == "single":
+        if not os.path.isfile(config["input_video_filepath"]) and all(
+            os.path.abspath(config["input_video_filepath"])
+            != os.path.abspath(filepath)
+            for filepath in all_output_filepath_set
+        ):
+            raise ValueError(
+                f"input video filepath: "
+                f"{config['input_video_filepath']} "
+                f"is not a file."
+            )
+        for external_subtitle_info in config["external_subtitle_info_list"]:
+            if not os.path.isfile(external_subtitle_info["filepath"]):
+                raise ValueError(
+                    f"filepath of external subtitle: "
+                    f"{external_subtitle_info['filepath']} "
+                    f"is not a file."
+                )
+            if isinstance(external_subtitle_info["language"], str):
+                if not is_available_language(
+                    external_subtitle_info["language"]
+                ):
+                    raise ValueError(
+                        f"language of external subtitle: "
+                        f"{external_subtitle_info['language']} "
+                        f"is not available."
+                    )
+            elif isinstance(external_subtitle_info["language"], list):
+                for language in external_subtitle_info["language"]:
+                    if not is_available_language(language):
+                        raise ValueError(
+                            f"language of external subtitle: "
+                            f"{language} "
+                            f"is not available."
+                        )
+            else:
+                raise TypeError(
+                    f"type of external_subtitle_info['language'] "
+                    f"must be str or list, instead of "
+                    f"{type(external_subtitle_info['language'])}"
+                )
+        for external_audio_info in config["external_audio_info_list"]:
+            if not os.path.isfile(external_audio_info["filepath"]):
+                raise ValueError(
+                    f"filepath of external audio: "
+                    f"{external_audio_info['filepath']} "
+                    f"is not a file."
+                )
+            if isinstance(external_audio_info["language"], str):
+                if not is_available_language(external_audio_info["language"]):
+                    raise ValueError(
+                        f"language of external audio: "
+                        f"{external_audio_info['language']} "
+                        f"is not available."
+                    )
+            elif isinstance(external_audio_info["language"], list):
+                for language in external_audio_info["language"]:
+                    if not is_available_language(language):
+                        raise ValueError(
+                            f"language of external audio: "
+                            f"{language} "
+                            f"is not available."
+                        )
+            else:
+                raise TypeError(
+                    f"type of external_audio_info['language'] "
+                    f"must be str or list, instead of "
+                    f"{type(external_audio_info['language'])}"
+                )
+
+        if config["external_chapter_info"]["filepath"]:
+            if not os.path.isfile(config["external_chapter_info"]["filepath"]):
+                raise ValueError(
+                    f"filepath of external chapter: "
+                    f"{config['external_chapter_info']['filepath']} "
+                    f"is not a file."
+                )
+
+    elif config["type"] == "series":
+        if not os.path.isdir(config["input_video_dir"]):
+            raise ValueError(
+                f"input video dir: "
+                f"{config['input_video_dir']} "
+                f"is not a dir."
+            )
+
+        if not any(
+            re.search(config["input_video_filename_reexp"], filename)
+            for filename in os.listdir(config["input_video_dir"])
+        ):
+            raise ValueError(
+                f"input_video_filename_reexp: "
+                f"{config['input_video_filename_reexp']} "
+                f"can not match filename in "
+                f"{config['input_video_dir']}"
+            )
+        for external_subtitle_info in config["external_subtitle_info_list"]:
+            if not os.path.isdir(external_subtitle_info["subtitle_dir"]):
+                raise ValueError(
+                    f"subtitle dir of external subtitle: "
+                    f"{external_subtitle_info['subtitle_dir']} "
+                    f"is not a dir."
+                )
+            if not any(
+                re.search(
+                    external_subtitle_info["subtitle_filename_reexp"], filename
+                )
+                for filename in os.listdir(
+                    external_subtitle_info["subtitle_dir"]
+                )
+            ):
+                raise ValueError(
+                    f"subtitle filename reexp of external subtitle: "
+                    f"{external_subtitle_info['subtitle_filename_reexp']} "
+                    f"can not match filename in "
+                    f"{external_subtitle_info['subtitle_dir']}"
+                )
+
+            if isinstance(external_subtitle_info["language"], str):
+                if not is_available_language(
+                    external_subtitle_info["language"]
+                ):
+                    raise ValueError(
+                        f"language of external subtitle: "
+                        f"{external_subtitle_info['language']} "
+                        f"is not available."
+                    )
+            elif isinstance(external_subtitle_info["language"], list):
+                for language in external_subtitle_info["language"]:
+                    if not is_available_language(language):
+                        raise ValueError(
+                            f"language of external subtitle: "
+                            f"{language} "
+                            f"is not available."
+                        )
+            else:
+                raise TypeError(
+                    f"type of external_subtitle_info['language'] "
+                    f"must be str or list, instead of "
+                    f"{type(external_subtitle_info['language'])}"
+                )
+        for external_audio_info in config["external_audio_info_list"]:
+            if not os.path.isdir(external_audio_info["audio_dir"]):
+                raise ValueError(
+                    f"audio dir of external audio: "
+                    f"{external_audio_info['audio_dir']} "
+                    f"is not a dir."
+                )
+            if not any(
+                re.search(
+                    external_audio_info["audio_filename_reexp"], filename
+                )
+                for filename in os.listdir(external_audio_info["audio_dir"])
+            ):
+                raise ValueError(
+                    f"audio filename reexp of external audio: "
+                    f"{external_audio_info['audio_filename_reexp']} "
+                    f"can not match filename in "
+                    f"{external_audio_info['audio_dir']}"
+                )
+
+            if isinstance(external_audio_info["language"], str):
+                if not is_available_language(external_audio_info["language"]):
+                    raise ValueError(
+                        f"language of external audio: "
+                        f"{external_audio_info['language']} "
+                        f"is not available."
+                    )
+            elif isinstance(external_audio_info["language"], list):
+                for language in external_audio_info["language"]:
+                    if not is_available_language(language):
+                        raise ValueError(
+                            f"language of external audio: "
+                            f"{language} "
+                            f"is not available."
+                        )
+            else:
+                raise TypeError(
+                    f"type of external_audio_info['language'] "
+                    f"must be str or list, instead of "
+                    f"{type(external_audio_info['language'])}"
+                )
+
+        if config["external_chapter_info"]["chapter_dir"]:
+            if not os.path.isdir(
+                config["external_chapter_info"]["chapter_dir"]
+            ):
+                raise ValueError(
+                    f"chapter dir: "
+                    f"{config['external_chapter_info']['chapter_dir']} "
+                    f"is not a dir."
+                )
+
+            if not any(
+                re.search(
+                    config["external_chapter_info"]["chapter_filename_reexp"],
+                    filename,
+                )
+                for filename in os.listdir(
+                    config["external_chapter_info"]["chapter_dir"]
+                )
+            ):
+                raise ValueError(
+                    f"chapter_filename_reexp: "
+                    f"{config['external_chapter_info']['chapter_filename_reexp']} "
+                    f"can not match filename in "
+                    f"{config['external_chapter_info']['chapter_dir']}"
+                )
+    else:
+        raise ValueError(f"unkonwn type: {config['type']}")
+
+    constant = global_constant()
+
+    available_package_format_set: set = constant.available_package_format_set
+    if config["package_format"] not in available_package_format_set:
+        raise RangeError(
+            message=(
+                f"{config['package_format']} is not an available "
+                "package_format"
+            ),
+            valid_range=str(available_package_format_set),
+        )
+
+    available_video_process_option_set: set = constant.available_video_process_option_set
+    if (
+        config["video_process_option"]
+        not in available_video_process_option_set
+    ):
+        raise RangeError(
+            message=(
+                f"{config['video_process_option']} is not an available "
+                "video_process_option"
+            ),
+            valid_range=str(available_video_process_option_set),
+        )
+
+    if not is_available_language(config["video_language"]):
+        raise ValueError(
+            f"language of video: {config['video_language']} is not available."
+        )
+
+    available_frame_server_set: set = constant.available_frame_server_set
+    if config["frame_server"] not in available_frame_server_set:
+        raise RangeError(
+            message=(
+                f"{config['frame_server']} is not an available " "frame_server"
+            ),
+            valid_range=str(available_frame_server_set),
+        )
+
+    if config["frame_server_template_filepath"]:
+        if not os.path.isfile(config["frame_server_template_filepath"]):
+            raise ValueError(
+                f"frame_server_template_filepath: "
+                f"{config['frame_server_template_filepath']} "
+                f"is not a file."
+            )
+
+    if "subtitle_filepath" in config["frame_server_template_config"].keys():
+        if config["frame_server_template_config"]["subtitle_filepath"]:
+            if not os.path.isfile(
+                config["frame_server_template_config"]["subtitle_filepath"]
+            ):
+                raise ValueError(
+                    f"subtitle_filepath in frame_server_template_config: "
+                    f"{config['frame_server_template_config']['subtitle_filepath']} "
+                    f"is not a file."
+                )
+
+    available_video_transcoding_method_set: set = constant.available_video_transcoding_method_set
+    if (
+        config["video_transcoding_method"]
+        not in available_video_transcoding_method_set
+    ):
+        raise RangeError(
+            message=(
+                f"{config['video_transcoding_method']} is not an available "
+                "video_transcoding_method"
+            ),
+            valid_range=str(available_video_transcoding_method_set),
+        )
+
+    available_output_frame_rate_mode_set: set = constant.available_output_frame_rate_mode_set
+    if (
+        config["output_frame_rate_mode"]
+        not in available_output_frame_rate_mode_set
+    ):
+        raise RangeError(
+            message=(
+                f"{config['output_frame_rate_mode']} is not an available "
+                "output_frame_rate_mode"
+            ),
+            valid_range=str(available_output_frame_rate_mode_set),
+        )
+
+    available_output_dynamic_range_mode_set: set = constant.available_output_dynamic_range_mode_set
+    if (
+        config["output_dynamic_range_mode"]
+        not in available_output_dynamic_range_mode_set
+    ):
+        raise RangeError(
+            message=(
+                f"{config['output_dynamic_range_mode']} is not an available "
+                "output_dynamic_range_mode"
+            ),
+            valid_range=str(available_output_dynamic_range_mode_set),
+        )
+
+    available_audio_prior_option_set: set = constant.available_audio_prior_option_set
+    if config["audio_prior_option"] not in available_audio_prior_option_set:
+        raise RangeError(
+            message=(
+                f"{config['audio_prior_option']} is not an available "
+                "audio_prior_option"
+            ),
+            valid_range=str(available_audio_prior_option_set),
+        )
+
+    available_external_audio_process_option_set: set = constant.available_external_audio_process_option_set
+    if (
+        config["external_audio_process_option"]
+        not in available_external_audio_process_option_set
+    ):
+        raise RangeError(
+            message=(
+                f"{config['external_audio_process_option']} is not an available "
+                "external_audio_process_option"
+            ),
+            valid_range=str(available_external_audio_process_option_set),
+        )
+
+    available_internal_audio_track_to_process_set: set = constant.available_internal_audio_track_to_process_set
+    if (
+        config["internal_audio_track_to_process"]
+        not in available_internal_audio_track_to_process_set
+    ):
+        raise RangeError(
+            message=(
+                f"{config['internal_audio_track_to_process']} is not an available "
+                "internal_audio_track_to_process"
+            ),
+            valid_range=str(available_internal_audio_track_to_process_set),
+        )
+
+    available_internal_audio_process_option_set: set = constant.available_internal_audio_process_option_set
+    if (
+        config["internal_audio_process_option"]
+        not in available_internal_audio_process_option_set
+    ):
+        raise RangeError(
+            message=(
+                f"{config['internal_audio_process_option']} is not an available "
+                "internal_audio_process_option"
+            ),
+            valid_range=str(available_internal_audio_process_option_set),
+        )
+    for internal_audio_info in config["internal_audio_info_list"]:
+        if not is_available_language(internal_audio_info["language"]):
+            raise ValueError(
+                f"language of internal audio: "
+                f"{internal_audio_info['language']} "
+                f"is not available."
+            )
+
+    available_subtitle_prior_option_set: set = constant.available_subtitle_prior_option_set
+    if (
+        config["subtitle_prior_option"]
+        not in available_subtitle_prior_option_set
+    ):
+        raise RangeError(
+            message=(
+                f"{config['subtitle_prior_option']} is not an available "
+                "subtitle_prior_option"
+            ),
+            valid_range=str(available_subtitle_prior_option_set),
+        )
+    for internal_subtitle_info in config["internal_subtitle_info_list"]:
+        if not is_available_language(internal_subtitle_info["language"]):
+            raise ValueError(
+                f"language of internal subtitle: "
+                f"{internal_subtitle_info['language']} "
+                f"is not available."
+            )
+
+    for filepath in config["external_attachment_filepath_list"]:
+        if not os.path.isfile(filepath):
+            raise ValueError(
+                f"external_attachment_filepath: {filepath} is not a file."
+            )
+
+
+def get_output_filepath_set(one_mission_config: dict):
+    config = one_mission_config
+    output_filepath_set: set = set()
+    if config["type"] == "single":
+        output_filepath_set.add(
+            os.path.join(
+                config["output_video_dir"],
+                config["output_video_name"] + "." + config["package_format"],
+            )
+        )
+    elif config["type"] == "series":
+        for episode in config["episode_list"]:
+            output_video_name: str = config[
+                "output_video_name_template_str"
+            ].format(episode=episode) + "." + config["package_format"]
+
+            output_filepath_set.add(
+                os.path.join(config["output_video_dir"], output_video_name)
+            )
+    return output_filepath_set
+
+
 def transcode_all_missions(
     config_json_filepath: str, param_template_json_filepath: str
 ):
@@ -1670,7 +2095,7 @@ def transcode_all_missions(
 
     if not os.path.isfile(config_json_filepath):
         raise FileNotFoundError(
-            f"input json file cannot be found with " f"{config_json_filepath}"
+            f"input json file cannot be found with {config_json_filepath}"
         )
 
     if not os.path.isfile(param_template_json_filepath):
@@ -1697,6 +2122,8 @@ def transcode_all_missions(
     time.sleep(basic_config_dict["delay_start_sec"])
 
     all_mission_config_list: list = config_dict["all_mission_config"]
+    all_output_filepath_set: set = set()
+    new_all_mission_config_list: list = []
     for mission_config in all_mission_config_list:
         mission_config["universal_config"] = dict(
             dict(
@@ -1716,6 +2143,10 @@ def transcode_all_missions(
             dict(type=mission_config["type"]),
             **mission_config["type_related_config"],
             **mission_config["universal_config"],
+        )
+
+        config_pre_check(
+            mission_config, all_output_filepath_set=all_output_filepath_set
         )
 
         episode_list_re_exp: str = "(\\d+)~(\\d+)"
@@ -1746,6 +2177,8 @@ def transcode_all_missions(
                 mission_config[key] = param_template_dict[key][
                     mission_config[key]
                 ]
+
+        all_output_filepath_set |= get_output_filepath_set(mission_config)
 
         if mission_config["type"] == "series":
             for episode in mission_config["segmented_transcode_config"].keys():
@@ -1823,6 +2256,9 @@ def transcode_all_missions(
         Config: namedtuple = namedtuple("Config", sorted(mission_config))
         mission_config: namedtuple = Config(**mission_config)
 
+        new_all_mission_config_list.append(mission_config)
+
+    for mission_config in new_all_mission_config_list:
         if mission_config.type == "series":
             series_transcoding_mission = SeriesVideoTranscoding(
                 input_video_dir=mission_config.input_video_dir,

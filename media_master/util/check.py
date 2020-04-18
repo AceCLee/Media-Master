@@ -17,6 +17,7 @@
 """
 
 import os
+from .constant import global_constant
 
 
 def check_file_environ_path(filename_set: set) -> bool:
@@ -40,5 +41,17 @@ def check_file_environ_path(filename_set: set) -> bool:
     return all(
         filename.lower() in all_filename_set for filename in filename_set
     )
+
+
+def is_iso_language(iso_language: str):
+    if not iso_language:
+        return False
+
+    constant = global_constant()
+    all_iso639_code_set: set = constant.all_iso639_code_set
+    if iso_language in all_iso639_code_set:
+        return True
+    else:
+        return False
 
 

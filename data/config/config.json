@@ -83,7 +83,7 @@
             },
             "segmented_transcode_config": {},
             "output_video_dir": "",
-            "output_video_name_template_str": "",
+            "output_video_name_template_str": "[Ace] XXX [{episode:0>2}]",
             "episode_list": "1~26"
         },
         "universal_config": {

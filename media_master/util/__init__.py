@@ -1,5 +1,5 @@
 from .chapter import convert_chapter_format, get_chapter_format_info_dict
-from .check import check_file_environ_path
+from .check import check_file_environ_path, is_iso_language
 from .config import load_config, save_config
 from .constant import global_constant
 from .extraction import (

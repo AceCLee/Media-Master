@@ -17,10 +17,33 @@
 """
 
 from collections import namedtuple
+from .language import all_iso639_code_set
 
 
 def global_constant():
     constant_dict: dict = dict(
+        all_iso639_code_set=all_iso639_code_set(),
+        available_package_format_set={"mkv", "mp4"},
+        available_video_process_option_set={"copy", "transcode"},
+        available_frame_server_set={"vspipe", ""},
+        available_video_transcoding_method_set={"x264", "x265", "nvenc"},
+        available_output_frame_rate_mode_set={
+            "",
+            "auto",
+            "unchange",
+            "vfr",
+            "cfr",
+        },
+        available_output_dynamic_range_mode_set={"", "unchange", "hdr", "sdr"},
+        available_audio_prior_option_set={"internal", "external"},
+        available_external_audio_process_option_set={"copy", "transcode"},
+        available_internal_audio_track_to_process_set={"all", "default"},
+        available_internal_audio_process_option_set={
+            "copy",
+            "transcode",
+            "skip",
+        },
+        available_subtitle_prior_option_set={"internal", "external"},
         video_type="video",
         audio_type="audio",
         subtitle_type="subtitle",

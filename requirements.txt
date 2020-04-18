@@ -1,3 +1,4 @@
 pymediainfo==4.0
 pandas
 numpy
+iso-639
