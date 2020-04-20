@@ -10,13 +10,13 @@ It supports changing fps, changing sar, hdr, vfr and so on.
 
 Chinese document: [Media Master - Ace的快乐屋](https://aceclee.com/archives/category/media-master)
 
-Supportive frameserver: VapourSynth.
+Supported frameserver: VapourSynth.
 
-Supportive output video format: hevc([x265-Yuuki-Asuna](https://github.com/msg7086/x265-Yuuki-Asuna), [NVEnc](https://github.com/rigaya/NVEnc)), avc([x264](https://github.com/jpsdr/x264), [NVEnc](https://github.com/rigaya/NVEnc)).
+Supported output video format: hevc([x265-Yuuki-Asuna](https://github.com/msg7086/x265-Yuuki-Asuna), [NVEnc](https://github.com/rigaya/NVEnc)), avc([x264](https://github.com/jpsdr/x264), [NVEnc](https://github.com/rigaya/NVEnc)).
 
-Supportive output audio format: flac, opus, qaac.
+Supported output audio format: flac, opus, qaac.
 
-Supportive container: mkv, mp4.
+Supported container: mkv, mp4.
 
 ## Table of Contents
 
