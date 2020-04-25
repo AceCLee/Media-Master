@@ -16,6 +16,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
+import logging
 import os
 import re
 import subprocess
@@ -26,6 +27,10 @@ from pymediainfo import MediaInfo
 
 from ..error import RangeError
 from .constant import global_constant
+
+g_logger = logging.getLogger(__name__)
+g_logger.propagate = True
+g_logger.setLevel(logging.DEBUG)
 
 
 def get_proper_sar(sar, max_denominator=100) -> dict:
@@ -385,85 +390,57 @@ def reliable_meta_data(
         return False
 
 
-def change_mkv_meta_data(
-    mkv_filepath: str, title_map_dict: dict, mkvmerge_exe_file_dir=""
+def edit_mkv_prop(
+    mkv_filepath: str, info_list: list, mkvpropedit_exe_file_dir=""
 ):
-    original_filepath: str = mkv_filepath
-    if not os.path.isfile(original_filepath):
+    if not os.path.isfile(mkv_filepath):
         raise ValueError
-    original_full_filename: str = os.path.basename(original_filepath)
-    file_dir: str = os.path.dirname(original_filepath)
-    original_filename, extension = os.path.splitext(original_full_filename)
-    cache_filename: str = original_filename + "_cache"
-    cache_full_filename: str = cache_filename + extension
-    cache_filepath: str = os.path.join(file_dir, cache_full_filename)
 
-    media_info_list: list = MediaInfo.parse(original_filepath).to_data()[
-        "tracks"
-    ]
+    mkvpropedit_exe_filename: str = "mkvpropedit.exe"
 
-    track_info_list: list = [
-        track
-        for track in media_info_list
-        if track["track_type"].lower() != "general"
-        and track["track_type"].lower() != "menu"
-    ]
-
-    skip_bool: bool = True
-    for track_info in track_info_list:
-        if (
-            "streamorder" in track_info.keys()
-            and "title" in track_info.keys()
-            and track_info["title"] in title_map_dict.keys()
-        ):
-            skip_bool = False
-            break
-
-    if skip_bool:
-        return
-
-    mkvmerge_exe_filename: str = "mkvmerge.exe"
-
-    mkvmerge_exe_filepath: str = os.path.join(
-        mkvmerge_exe_file_dir, mkvmerge_exe_filename
+    mkvpropedit_exe_filepath: str = os.path.join(
+        mkvpropedit_exe_file_dir, mkvpropedit_exe_filename
     )
-    output_key: str = "--output"
-    output_value: str = cache_filepath
+    edit_key: str = "--edit"
+    edit_track_value_format: str = "{selector}:{track_order}"
+    set_key: str = "--set"
+    set_value_format: str = "{key}={value}"
 
-    track_name_key: str = "--track-name"
-    track_name_value_format: str = "{track_id}:{track_name}"
+    cmd_param_list: list = [mkvpropedit_exe_filepath]
 
-    cmd_param_list: list = [mkvmerge_exe_filepath, output_key, output_value]
-
-    for track_info in track_info_list:
-        if (
-            "streamorder" in track_info.keys()
-            and "title" in track_info.keys()
-            and track_info["title"] in title_map_dict.keys()
-        ):
-            cmd_param_list.extend(
-                [
-                    track_name_key,
-                    track_name_value_format.format(
-                        track_id=track_info["streamorder"],
-                        track_name=title_map_dict[track_info["title"]],
-                    ),
-                ]
+    for info_dict in info_list:
+        print(info_dict)
+        if info_dict["selector"] == "track":
+            edit_value: str = edit_track_value_format.format(
+                selector=info_dict["selector"],
+                track_order=int(info_dict["track_index"]) + 1,
             )
+        else:
+            raise ValueError
+        cmd_param_list.extend(
+            [
+                edit_key,
+                edit_value,
+                set_key,
+                set_value_format.format(
+                    key=info_dict["prop_key"], value=info_dict["prop_value"]
+                ),
+            ]
+        )
 
-    cmd_param_list.append(original_filepath)
+    cmd_param_list.append(mkv_filepath)
 
-    mkvmerge_param_debug_str: str = (
-        f"multiplex mkvmerge: param: "
-        f"{subprocess.list2cmdline(cmd_param_list)}"
+    mkvpropedit_param_debug_str: str = (
+        f"mkvpropedit: param: {subprocess.list2cmdline(cmd_param_list)}"
     )
-    print(mkvmerge_param_debug_str, file=sys.stderr)
+    g_logger.log(logging.DEBUG, mkvpropedit_param_debug_str)
 
     start_info_str: str = (
-        f"multiplex mkvmerge: starting multiplexing {cache_filepath}"
+        f"mkvpropedit: start editing prop of {mkv_filepath}"
     )
 
     print(start_info_str, file=sys.stderr)
+    g_logger.log(logging.INFO, start_info_str)
 
     process = subprocess.Popen(
         cmd_param_list, stdout=subprocess.PIPE, text=True, encoding="utf-8"
@@ -479,9 +456,10 @@ def change_mkv_meta_data(
 
     if return_code == 0:
         end_info_str: str = (
-            f"multiplex mkvmerge: " f"multiplex {cache_filepath} successfully."
+            f"mkvpropedit: edit prop of {mkv_filepath} successfully."
         )
         print(end_info_str, file=sys.stderr)
+        g_logger.log(logging.INFO, end_info_str)
     elif return_code == 1:
         warning_prefix = "Warning:"
         warning_text_str = "".join(
@@ -489,18 +467,16 @@ def change_mkv_meta_data(
         )
         stdout_text_str = "".join(stdout_lines)
         warning_str: str = (
-            "multiplex mkvmerge: "
-            "mkvmerge has output at least one warning, "
-            "but muxing did continue.\n"
+            "mkvpropedit: "
+            "mkvpropedit has output at least one warning, "
+            "but modification did continue.\n"
             f"warning:\n{warning_text_str}"
             f"stdout:\n{stdout_text_str}"
         )
         print(warning_str, file=sys.stderr)
+        g_logger.log(logging.WARNING, warning_str)
     else:
-        error_str = (
-            f"multiplex mkvmerge: "
-            f"multiplex {cache_filepath} unsuccessfully."
-        )
+        error_str = f"mkvpropedit: edit prop of {mkv_filepath} unsuccessfully."
         print(error_str, file=sys.stderr)
         raise subprocess.CalledProcessError(
             returncode=return_code,
@@ -508,11 +484,67 @@ def change_mkv_meta_data(
             output=stdout_text_str,
         )
 
-    os.remove(original_filepath)
-    os.rename(cache_filepath, original_filepath)
+
+def change_mkv_meta_data(mkv_filepath: str, title_map_dict: dict):
+    if not os.path.isfile(mkv_filepath):
+        raise ValueError
+
+    media_info_list: list = MediaInfo.parse(mkv_filepath).to_data()["tracks"]
+
+    track_info_list: list = [
+        track
+        for track in media_info_list
+        if track["track_type"].lower() != "general"
+        and track["track_type"].lower() != "menu"
+    ]
+
+    skip_bool: bool = True
+    for track_info in track_info_list:
+        if (
+            "streamorder" in track_info.keys()
+            and "title" in track_info.keys()
+            and any(
+                re.search(re_exp, track_info["title"])
+                for re_exp in title_map_dict.keys()
+            )
+        ):
+            skip_bool = False
+            break
+
+    if skip_bool:
+        return
+
+    mkvpropedit_info_list: list = []
+    for track_info in track_info_list:
+        if (
+            "streamorder" in track_info.keys()
+            and "title" in track_info.keys()
+            and any(
+                re.search(re_exp, track_info["title"])
+                for re_exp in title_map_dict.keys()
+            )
+        ):
+            prop_value: str = ""
+            for re_exp, value_format in title_map_dict.items():
+                re_result = re.search(re_exp, track_info["title"])
+                if not re_result:
+                    continue
+                prop_value = value_format.format(
+                    creator=re_result.groupdict()["creator"]
+                )
+            mkvpropedit_info_list.append(
+                dict(
+                    selector="track",
+                    track_index=int(track_info["streamorder"]),
+                    prop_key="name",
+                    prop_value=prop_value,
+                )
+            )
+
+    edit_mkv_prop(mkv_filepath, info_list=mkvpropedit_info_list)
 
 
-def change_dir_mkv_meta_data(file_dir: str):
+def change_dir_mkv_meta_data(file_dir: str, title_map_dict: dict):
     mkv_extension: str = ".mkv"
     mkv_filename_list: list = [
         filename
@@ -520,27 +552,15 @@ def change_dir_mkv_meta_data(file_dir: str):
         if filename.endswith(mkv_extension)
         and os.path.isfile(os.path.join(file_dir, filename))
     ]
-    title_map_dict: dict = {
-        "[Main Audio": "Main Audio",
-        "[Commentary Audio": "Commentary Audio",
-        "Character Commentary Audio": "Commentary Audio",
-        "[动漫国] Simple Chinese": "[动漫国] Simplified Chinese",
-        "[Kamigami] Simple Chinese and Japanese": "[Kamigami] Simplified Chinese and Japanese",
-        "[SumiSora&FLsnow] Simple Chinese": "[SumiSora&FLsnow] Simplified Chinese",
-        "[RUELL-Next] Simple Chinese": "[RUELL-Next] Simplified Chinese",
-        "[恶魔岛] Simple Chinese": "[恶魔岛] Simplified Chinese",
-        "[POPGO.FREEWIND] Simple Chinese": "[POPGO.FREEWIND] Simplified Chinese",
-        "[澄空] Simple Chinese": "[澄空] Simplified Chinese",
-        "[风之圣殿] Simple Chinese & Japanese": "[风之圣殿] Simplified Chinese & Japanese",
-    }
+
     for filename in mkv_filename_list:
         filepath = os.path.join(file_dir, filename)
         print(filepath)
         change_mkv_meta_data(filepath, title_map_dict)
 
 
-def change_volume_mkv_meta_data(volume: str):
+def change_volume_mkv_meta_data(volume: str, title_map_dict: dict):
     for dirpath, dirnames, filenames in os.walk(volume):
-        change_dir_mkv_meta_data(dirpath)
+        change_dir_mkv_meta_data(dirpath, title_map_dict=title_map_dict)
 
 

@@ -1938,6 +1938,7 @@ def config_pre_check(one_mission_config: dict, all_output_filepath_set: set):
     if (
         config["video_transcoding_method"]
         not in available_video_transcoding_method_set
+        and config["video_process_option"] != "copy"
     ):
         raise RangeError(
             message=(
