@@ -25,15 +25,12 @@
                 "output_full_range_bool": false,
                 "video_title": "AceCLee",
                 "video_language": "",
-                "frame_server": "",
-                "frame_server_template_filepath": "",
+                "frame_server": "vspipe",
+                "frame_server_template_filepath": "D:/xxx/test.vpy",
                 "frame_server_template_config": {},
-                "video_transcoding_method": "nvenc",
-                "video_transcoding_cmd_param_template": "nvenc",
-                "video_transcoding_cmd_param_template_config": {
-                    "codec": "hevc",
-                    "preset": "quality"
-                },
+                "video_transcoding_method": "x265",
+                "video_transcoding_cmd_param_template": "x265_slower",
+                "video_transcoding_cmd_param_template_config": {},
                 "gop_segmented_transcode_config": {
                     "gop_frame_cnt": 9000
                 },
@@ -120,7 +117,7 @@
                 "internal_audio_info_list": [],
                 "internal_audio_track_order_list": [],
                 "audio_transcoding_method": "qaac",
-                "audio_transcoding_cmd_param_template": "qaac"
+                "audio_transcoding_cmd_param_template": "qaac_test"
             },
             "subtitle_related_config": {
                 "subtitle_prior_option": "external",
