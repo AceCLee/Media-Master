@@ -1,6 +1,6 @@
 # Media Master
 
-You transcode videos with your vapoursynth script template via Media Master.
+You can transcode videos with your vapoursynth script template via Media Master.
 
 If you want to transcode many videos with flexibility automatically, you should use it.
 
@@ -38,25 +38,25 @@ Now, I can use Media Master to transcode videos expediently.
 
 ## Install
 
-download Media Master
+download Media Master.
 
 ```shell
 git clone https://github.com/AceCLee/Media-Master.git
 ```
 
-install python library.
+install python libraries.
 
 ```shell
 pip install -r requirements.txt
 ```
 
-install [MKVToolNix Downloads](https://mkvtoolnix.download/downloads.html), [Downloads | GPAC](https://gpac.wp.imt.fr/downloads/), [NVEnc](https://github.com/rigaya/NVEnc), [x265-Yuuki-Asuna](https://github.com/msg7086/x265-Yuuki-Asuna), [x264](https://github.com/jpsdr/x264), [msg7086/gop_muxer](https://github.com/msg7086/gop_muxer) and [Download FFmpeg](http://ffmpeg.org/download.html), after thar you need to add their paths to environment variables.
+install [MKVToolNix](https://mkvtoolnix.download/downloads.html), [GPAC](https://gpac.wp.imt.fr/downloads/), [NVEnc](https://github.com/rigaya/NVEnc/releases), [x265-Yuuki-Asuna](https://down.7086.in/x265-Yuuki-Asuna/), [x264-tmod](https://github.com/jpsdr/x264/releases), [gop_muxer](https://github.com/msg7086/gop_muxer/releases), [FFmpeg](http://ffmpeg.org/download.html), [FLAC](https://xiph.org/flac/download.html), [qaac](https://github.com/nu774/qaac/releases), [AppleApplicationSupport used by qaac](https://github.com/kiki-kiko/iTunes-12.3.1.23) and [Opus](https://opus-codec.org/downloads/), add their paths to environment variables.
 
-install [vapoursynth/vapoursynth: A video processing framework with simplicity in mind](https://github.com/vapoursynth/vapoursynth) and add path of vspipe.exe to environment variables.
+install [vapoursynth](https://github.com/vapoursynth/vapoursynth/releases) or [vapoursynth-portable](https://github.com/theChaosCoder/vapoursynth-portable-FATPACK/releases) and add path of vspipe.exe to environment variables.
 
 ## Usage
 
-edit config files.
+edit config files (data/config/config.json and data/config/param_template.json).
 
 ```shell
 python compress.py
