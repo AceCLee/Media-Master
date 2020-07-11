@@ -51,19 +51,8 @@ def save_config(config_json_filepath: str, config_dict: dict):
             f"type of config_dict must be dict "
             f"instead of {type(config_dict)}"
         )
-    config_json_dir = os.path.dirname(config_json_filepath)
+    config_json_dir = os.path.abspath(os.path.dirname(config_json_filepath))
     if not os.path.isdir(config_json_dir):
         os.makedirs(config_json_dir)
     with open(config_json_filepath, "w", encoding="utf-8") as file:
         file.write(json.dumps(config_dict, indent=4, ensure_ascii=False))
-
-
-
-
-
-
-
-
-
-
-

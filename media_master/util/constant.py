@@ -22,6 +22,8 @@ from .language import all_iso639_code_set
 
 def global_constant():
     constant_dict: dict = dict(
+        python_text_codec_dict={"utf_8_bom": "utf-8-sig"},
+        vapoursynth_lwlibavsource_cache_file_extension=".lwi",
         all_iso639_code_set=all_iso639_code_set(),
         available_package_format_set={"mkv", "mp4"},
         available_video_process_option_set={"copy", "transcode"},

@@ -2,3 +2,6 @@ pymediainfo==4.0
 pandas
 numpy
 iso-639
+chardet
+pysubs2
+fontTools

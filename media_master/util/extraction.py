@@ -37,14 +37,14 @@ from .chapter import convert_chapter_format, get_chapter_format_info_dict
 from .check import check_file_environ_path
 from .meta_data import (
     get_float_frame_rate,
-    get_proper_frame_rate,
-    reliable_meta_data,
     get_proper_color_specification,
+    get_proper_frame_rate,
     get_proper_hdr_info,
+    reliable_meta_data,
 )
 from .multiplex import multiplex_mkv
-
 from .timecode import mkv_timecode_2_standard_timecode
+from .constant import global_constant
 
 g_logger = logging.getLogger(__name__)
 g_logger.propagate = True
@@ -235,8 +235,6 @@ def extract_track_ffmpeg(
 
     print(start_info_str, file=sys.stderr)
     g_logger.log(logging.INFO, start_info_str)
-    
-    
     process = subprocess.Popen(args_list)
 
     process.communicate()
@@ -264,7 +262,8 @@ def extract_track_mkvextract(
     output_file_suffix: str,
     track_type: str,
     track_index: int,
-    mkvextract_exe_file_dir="",
+    disable_filename_index_bool: bool = False,
+    mkvextract_exe_file_dir: str = "",
 ) -> str:
     if not isinstance(input_filepath, str):
         raise TypeError(
@@ -380,9 +379,12 @@ def extract_track_mkvextract(
 
     track_suffix: str = output_file_suffix.replace(".", "")
 
-    output_file_fullname: str = (
-        f"{output_file_name}_index_{track_index}.{track_suffix}"
-    )
+    if disable_filename_index_bool:
+        output_file_fullname: str = f"{output_file_name}.{track_suffix}"
+    else:
+        output_file_fullname: str = (
+            f"{output_file_name}_index_{track_index}.{track_suffix}"
+        )
 
     output_filepath: str = os.path.join(output_file_dir, output_file_fullname)
 
@@ -432,7 +434,11 @@ def extract_track_mkvextract(
     g_logger.log(logging.INFO, start_info_str)
 
     process = subprocess.Popen(
-        cmd_param_list, stdout=subprocess.PIPE, text=True, encoding="utf-8"
+        cmd_param_list,
+        stdout=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="ignore",
     )
 
     stdout_lines: list = []
@@ -616,11 +622,12 @@ def extract_all_subtitles(
         elif text_format == "utf-8":
             track_suffix = "srt"
 
+        output_filename: str = (f"{output_file_name}_index_{track_index}")
+
         if any(
             input_filepath.endswith(mkv_suffix)
             for mkv_suffix in mkv_suffix_set
         ):
-            output_filename: str = (f"{output_file_name}_index_{track_index}")
 
             output_filepath: str = extract_track_mkvextract(
                 input_filepath=input_filepath,
@@ -632,9 +639,9 @@ def extract_all_subtitles(
             )
         else:
             output_filepath: str = extract_track_ffmpeg(
-                input_filepath,
+                input_filepath=output_filename,
                 output_file_dir=output_file_dir,
-                output_file_name=output_file_name,
+                output_file_name=output_filename,
                 output_file_suffix=track_suffix,
                 track_type="subtitle",
                 stream_identifier=int(text_info_dict["stream_identifier"]),
@@ -790,7 +797,11 @@ def extract_all_attachments(
     g_logger.log(logging.INFO, start_info_str)
 
     process = subprocess.Popen(
-        cmd_param_list, stdout=subprocess.PIPE, text=True, encoding="utf-8"
+        cmd_param_list,
+        stdout=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="ignore",
     )
 
     stdout_lines: list = []
@@ -956,7 +967,6 @@ def extract_chapter(
         )
 
         menu_key: str = "chapters"
-        
         ogm_menu_key: str = "--simple"
         menu_value: str = output_filepath
 
@@ -985,7 +995,11 @@ def extract_chapter(
         g_logger.log(logging.INFO, start_info_str)
 
         process = subprocess.Popen(
-            cmd_param_list, stdout=subprocess.PIPE, text=True, encoding="utf-8"
+            cmd_param_list,
+            stdout=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="ignore",
         )
 
         stdout_lines: list = []
@@ -1222,7 +1236,6 @@ def extract_audio_track(
         mkv_bool: bool = extension in mkv_suffix_set
 
         audio_format: str = audio_info_dict["format"].lower()
-        
 
         track_suffix: str = audio_format
         if audio_format == "mpeg audio":
@@ -1253,8 +1266,6 @@ def extract_audio_track(
             track_suffix = "wav"
         elif audio_format == "mlp fba":
             track_suffix = "thd"
-        
-        
         elif audio_format == "wma":
             track_suffix = "wma"
             mkv_bool = False
@@ -1637,6 +1648,8 @@ def copy_video(
     if not os.path.isdir(output_file_dir):
         os.makedirs(output_file_dir)
 
+    constant = global_constant()
+
     valid_video_filepath: str = get_video_with_valid_metadata(
         filepath=input_filepath,
         output_dir=output_file_dir,
@@ -1709,9 +1722,7 @@ def copy_video(
         sample_aspect_ratio=video_info_dict["pixel_aspect_ratio"]
         if "pixel_aspect_ratio" in video_info_dict.keys()
         else 1,
-        delay_ms=int(float(video_info_dict["delay"]))
-        if "delay" in video_info_dict.keys()
-        else 0,
+        delay_ms=0,
         stream_size_byte=int(video_info_dict["stream_size"])
         if "stream_size" in video_info_dict.keys()
         else -1,
@@ -1754,5 +1765,162 @@ def copy_video(
     )
 
     return video_track_file
+
+
+def extract_series_subtitles(
+    video_dir: str,
+    video_filename_re_exp: str,
+    output_dir: str,
+    subtitle_stream_identifier: int = 0,
+    language_suffix: str = "",
+):
+    if not os.path.isdir(output_dir):
+        os.makedirs(output_dir)
+
+    video_filename_list: list = [
+        filename
+        for filename in os.listdir(video_dir)
+        if re.search(video_filename_re_exp, filename)
+    ]
+
+    for full_filename in video_filename_list:
+        filepath: str = os.path.join(video_dir, full_filename)
+        filename, extension = os.path.splitext(full_filename)
+
+        media_info_list: list = MediaInfo.parse(filepath).to_data()["tracks"]
+        text_info_dict: dict = next(
+            (
+                track
+                for track in media_info_list
+                if track["track_type"] == "Text"
+                and track["stream_identifier"] == subtitle_stream_identifier
+            ),
+            None,
+        )
+
+        text_format: str = text_info_dict["format"].lower()
+        track_suffix: str = text_format
+        if text_format == "pgs":
+            track_suffix = "sup"
+        elif text_format == "vobsub":
+            track_suffix = "idx"
+        elif text_format == "utf-8":
+            track_suffix = "srt"
+
+        constant = global_constant()
+        mkv_suffix_set: set = set(constant.matroska_extensions)
+
+        if any(filepath.endswith(mkv_suffix) for mkv_suffix in mkv_suffix_set):
+            output_filename: str = filename + language_suffix
+
+            output_filepath: str = extract_track_mkvextract(
+                input_filepath=filepath,
+                output_file_dir=output_dir,
+                output_file_name=output_filename,
+                output_file_suffix=track_suffix,
+                track_type="text",
+                track_index=int(text_info_dict["streamorder"]),
+                disable_filename_index_bool=True,
+            )
+        else:
+            output_filepath: str = extract_track_ffmpeg(
+                filepath,
+                output_file_dir=output_dir,
+                output_file_name=output_filename,
+                output_file_suffix=track_suffix,
+                track_type="subtitle",
+                stream_identifier=int(text_info_dict["stream_identifier"]),
+            )
+
+
+def extract_series_audios(
+    video_dir: str,
+    video_filename_re_exp: str,
+    output_dir: str,
+    audio_stream_identifier: int = 0,
+):
+    if not os.path.isdir(output_dir):
+        os.makedirs(output_dir)
+
+    video_filename_list: list = [
+        filename
+        for filename in os.listdir(video_dir)
+        if re.search(video_filename_re_exp, filename)
+    ]
+
+    for full_filename in video_filename_list:
+        filepath: str = os.path.join(video_dir, full_filename)
+        filename, extension = os.path.splitext(full_filename)
+
+        media_info_list: list = MediaInfo.parse(filepath).to_data()["tracks"]
+        audio_info_dict: dict = next(
+            (
+                track
+                for track in media_info_list
+                if track["track_type"] == "Audio"
+                and track["stream_identifier"] == audio_stream_identifier
+            ),
+            None,
+        )
+
+        mkv_suffix_set: set = {".mkv", ".mka"}
+        _, extension = os.path.splitext(filepath)
+        mkv_bool: bool = extension in mkv_suffix_set
+
+        audio_format: str = audio_info_dict["format"].lower()
+
+        track_suffix: str = audio_format
+        if audio_format == "mpeg audio":
+            print(audio_info_dict)
+            if "format_profile" in audio_info_dict.keys():
+                format_profile = audio_info_dict["format_profile"].lower()
+                if format_profile == "layer 3":
+                    track_suffix = "mp3"
+                elif format_profile == "layer 2":
+                    track_suffix = "mp2"
+                else:
+                    raise RuntimeError(
+                        f"Unknown format_profile: {format_profile}"
+                    )
+            else:
+                if audio_info_dict["codec_id_hint"].lower() == "mp3":
+                    track_suffix = "mp3"
+                else:
+                    raise RuntimeError(
+                        f"Unknown codec_id_hint: "
+                        f"{audio_info_dict['codec_id_hint']}"
+                    )
+        elif audio_format == "e-ac-3":
+            track_suffix = "ec3"
+        elif audio_format == "ac-3":
+            track_suffix = "ac3"
+        elif audio_format == "pcm":
+            track_suffix = "wav"
+        elif audio_format == "mlp fba":
+            track_suffix = "thd"
+        elif audio_format == "wma":
+            track_suffix = "wma"
+            mkv_bool = False
+
+        output_filepath: str = ""
+        if mkv_bool:
+            audio_index: int = int(audio_info_dict["streamorder"])
+            output_filepath = extract_track_mkvextract(
+                filepath,
+                output_dir,
+                filename,
+                track_suffix,
+                "audio",
+                audio_index,
+            )
+        else:
+            output_filepath = extract_track_ffmpeg(
+                input_filepath=filepath,
+                output_file_dir=output_dir,
+                output_file_name=filename,
+                output_file_suffix=track_suffix,
+                track_type="audio",
+                stream_identifier=int(audio_info_dict["stream_identifier"]),
+            )
 
 

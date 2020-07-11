@@ -104,10 +104,12 @@ def package_subtitle_2_mkv(
 
     print(start_info_str, file=sys.stderr)
     g_logger.log(logging.INFO, start_info_str)
-    
-    
     process = subprocess.Popen(
-        cmd_param_list, stdout=subprocess.PIPE, text=True, encoding="utf-8"
+        cmd_param_list,
+        stdout=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="ignore",
     )
 
     stdout_lines: list = []
@@ -117,11 +119,6 @@ def package_subtitle_2_mkv(
         print(stdout_line, end="", file=sys.stderr)
 
     return_code = process.returncode
-    
-    
-    
-    
-    
 
     if return_code == 0:
         end_info_str: str = (

@@ -313,4 +313,20 @@
 ### Version 0.0.19.1
 
 * 将修改元信息的实现从mkvmerge改为mkvpropedit
+
+### Version 0.0.19.2
+
 * 修复正确性检查在copy视频时的一个逻辑错误
+* 修复视频提取和音频提取IO操作未错开的错误
+* 针对x264在中断压制后又重新压制导致和一次成型时体积的巨大差异，尝试通过在压制前删除之前的.264文件来避免此问题
+* 在正确性检查中加入将字幕非uft-8-bom编码更改为uft-8-bom编码，以应对vsmod无法识别uft-8编码的问题
+* mkvmerge在封装mkv文件时，媒体轨道原来的延迟会被考虑在内，不需要单独指定，不然会重复指定，修复之前版本会重复指定的错误
+* 在预检查中，增加对frame_server_template_config内的字幕文件的字体检查功能
+
+### Version 0.0.19.3
+
+* 检查硬字幕字体即"frame_server_template_config"-"subtitle_filepath"中字幕的字体是否存在(Windows Only)
+* 修复转码后未将视频流索引置为0(仍然为输入视频容器的视频轨的索引)的错误
+* 修复压制视频之前未检查编码器环境变量的问题
+* 在调用子进程时，为了避免出现UnicodeDecodeError，调用子进程加入errors参数以规避该错误
+* 将universal_config改为general_config

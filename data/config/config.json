@@ -6,33 +6,79 @@
     "all_mission_config": [{
         "type": "single",
         "type_related_config": {
-            "input_video_filepath": "",
+            "input_video_filepath": "A:/xxxx/xxxx.mkv",
             "external_subtitle_info_list": [],
             "external_audio_info_list": [],
             "external_chapter_info": {
                 "filepath": ""
             },
             "segmented_transcode_config_list": [],
-            "output_video_dir": "",
-            "output_video_name": ""
+            "output_video_dir": "A:/xxxx/",
+            "output_video_name": "xxxx"
         },
-        "universal_config": {
-            "cache_dir": "",
+        "general_config": {
+            "cache_dir": "A:/xxxx/",
             "package_format": "mp4",
-            "thread_bool": true,
+            "thread_bool": false,
             "video_related_config": {
                 "video_process_option": "transcode",
                 "output_full_range_bool": false,
-                "video_title": "AceCLee",
+                "video_title": "",
                 "video_language": "",
                 "frame_server": "vspipe",
-                "frame_server_template_filepath": "D:/xxx/test.vpy",
-                "frame_server_template_config": {},
-                "video_transcoding_method": "x265",
-                "video_transcoding_cmd_param_template": "x265_slower",
-                "video_transcoding_cmd_param_template_config": {},
+                "frame_server_template_filepath": "A:/xxxx/remove_grain_template.py",
+                "frame_server_template_config": {
+                    "input_filepath": "{{input_filepath}}",
+                    "threads_num": 0,
+                    "max_memory_size_mb": 0,
+                    "output_bit_depth": 0,
+                    "output_width": "{{input_video_width}}",
+                    "output_height": "{{input_video_height}}",
+                    "input_full_range_bool": "{{input_full_range_bool}}",
+                    "output_full_range_bool": "{{output_full_range_bool}}",
+                    "fps_num": "{{fps_num}}",
+                    "output_fps_num": "{{output_fps_num}}",
+                    "fps_den": "{{fps_den}}",
+                    "output_fps_den": "{{output_fps_den}}",
+                    "input_color_matrix": "{{input_color_matrix}}",
+                    "input_color_primaries": "{{input_color_primaries}}",
+                    "input_transfer": "{{input_transfer}}",
+                    "vfr_bool": "{{vfr_bool}}",
+                    "output_chroma_subsampling": "420",
+                    "subtitle_bool": true,
+                    "subtitle_filepath": "A:/xxxx//xxxx.ass",
+                    "timecode_filepath": "{{timecode_filepath}}",
+                    "first_frame_index": "{{first_frame_index}}",
+                    "last_frame_index": "{{last_frame_index}}"
+                },
+                "video_transcoding_method": "x264",
+                "video_transcoding_cmd_param_template": [
+                    "{{vspipe_exe_filepath}}",
+                    "--y4m",
+                    "{{input_vpy_filepath}}",
+                    "-",
+                    "|",
+                    "{{x264_exe_filepath}}",
+                    "--demuxer",
+                    "y4m",
+                    "-",
+                    "--output",
+                    "{{output_video_filepath}}",
+
+                    "--output-depth",
+                    "8",
+                    "--preset",
+                    "veryslow",
+                    "--crf",
+                    "{{crf}}"
+                ],
+                "video_transcoding_cmd_param_template_config": {
+                    "crf": 0,
+                    "merange": 0,
+                    "fgo": 0
+                },
                 "gop_segmented_transcode_config": {
-                    "gop_frame_cnt": 9000
+                    "gop_frame_cnt": 6000
                 },
                 "output_fps": "",
                 "output_frame_rate_mode": "",
@@ -42,86 +88,44 @@
             "audio_related_config": {
                 "audio_prior_option": "external",
                 "external_audio_process_option": "transcode",
-                "internal_audio_track_to_process": "all",
-                "internal_audio_process_option": "transcode",
+                "internal_audio_track_to_process": "default",
+                "internal_audio_process_option": "copy",
                 "internal_audio_info_list": [{
                     "title": "Main Audio",
-                    "language": "",
+                    "language": "jpn",
                     "delay_ms_delta": 0
                 }],
                 "internal_audio_track_order_list": [],
                 "audio_transcoding_method": "qaac",
-                "audio_transcoding_cmd_param_template": "qaac"
+                "audio_transcoding_cmd_param_template": [
+                    "{{ffmpeg_exe_filepath}}",
+                    "-i",
+                    "{{input_audio_filepath}}",
+                    "-vn",
+                    "-sn",
+                    "-dn",
+                    "-n",
+                    "-f",
+                    "wav",
+                    "-codec:a",
+                    "{{ffmpeg_wav_audio_codec}}",
+                    "-",
+                    "|",
+                    "{{qaac_exe_filepath}}",
+                    "--tvbr",
+                    "32",
+                    "--quality",
+                    "2",
+                    "--threading",
+                    "--ignorelength",
+                    "-o",
+                    "{{output_filepath}}",
+                    "-"
+                ]
             },
             "subtitle_related_config": {
                 "subtitle_prior_option": "external",
-                "copy_internal_subtitle_bool": true,
-                "internal_subtitle_info_list": [],
-                "internal_subtitle_track_order_list": []
-            },
-            "chapter_related_config": {
-                "copy_internal_chapter_bool": true
-            },
-            "attachment_related_config": {
-                "copy_internal_attachment_bool": false,
-                "external_attachment_filepath_list": []
-            }
-        }
-    }, {
-        "type": "series",
-        "type_related_config": {
-            "input_video_dir": "",
-            "input_video_filename_reexp": "",
-            "external_subtitle_info_list": [],
-            "external_audio_info_list": [],
-            "external_chapter_info": {
-                "chapter_dir": "",
-                "chapter_filename_reexp": ""
-            },
-            "segmented_transcode_config": {},
-            "output_video_dir": "",
-            "output_video_name_template_str": "[Ace] XXX [{episode:0>2}]",
-            "episode_list": "1~26"
-        },
-        "universal_config": {
-            "cache_dir": "",
-            "package_format": "mkv",
-            "thread_bool": true,
-            "video_related_config": {
-                "video_process_option": "transcode",
-                "output_full_range_bool": false,
-                "video_title": "AceCLee",
-                "video_language": "jpn",
-                "frame_server": "",
-                "frame_server_template_filepath": "",
-                "frame_server_template_config": {},
-                "video_transcoding_method": "nvenc",
-                "video_transcoding_cmd_param_template": "nvenc",
-                "video_transcoding_cmd_param_template_config": {
-                    "codec": "hevc",
-                    "preset": "quality"
-                },
-                "gop_segmented_transcode_config": {
-                    "gop_frame_cnt": 9000
-                },
-                "output_fps": "",
-                "output_frame_rate_mode": "",
-                "output_sar": "",
-                "output_dynamic_range_mode": ""
-            },
-            "audio_related_config": {
-                "audio_prior_option": "external",
-                "external_audio_process_option": "transcode",
-                "internal_audio_track_to_process": "all",
-                "internal_audio_process_option": "transcode",
-                "internal_audio_info_list": [],
-                "internal_audio_track_order_list": [],
-                "audio_transcoding_method": "qaac",
-                "audio_transcoding_cmd_param_template": "qaac_test"
-            },
-            "subtitle_related_config": {
-                "subtitle_prior_option": "external",
-                "copy_internal_subtitle_bool": true,
+                "copy_internal_subtitle_bool": false,
                 "internal_subtitle_info_list": [],
                 "internal_subtitle_track_order_list": []
             },

@@ -20,8 +20,8 @@ import re
 
 
 def mkv_timecode_2_standard_timecode(mkv_timecode_filepath: str):
-    mkv_timecode_comment_re_exp: str = "^
-    standard_timecode_comment_format: str = "
+    mkv_timecode_comment_re_exp: str = "^# timestamp format v(?P<version_num>\\d+)"
+    standard_timecode_comment_format: str = "# timecode format v{version_num}"
 
     data_str: str = ""
     with open(file=mkv_timecode_filepath, mode="r") as file:

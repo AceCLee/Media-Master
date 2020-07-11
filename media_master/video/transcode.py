@@ -26,10 +26,11 @@ import warnings
 from collections import deque, namedtuple
 
 from ..error import DirNotFoundError, MissTemplateError, RangeError
-
 from ..util import (
     check_file_environ_path,
     generate_vpy_file,
+    get_colorspace_specification,
+    get_proper_sar,
     get_reduced_fraction,
     global_constant,
     hash_name,
@@ -38,10 +39,7 @@ from ..util import (
     replace_config_template_dict,
     replace_param_template_list,
     save_config,
-    get_colorspace_specification,
-    get_proper_sar,
 )
-
 
 g_logger = logging.getLogger(__name__)
 g_logger.propagate = True
@@ -194,7 +192,6 @@ class VideoTranscoding(object):
         limited_range_param_value: str,
     ):
         if color_range_param in set(transcoding_cmd_param_list):
-            
             param_key_index: int = (
                 transcoding_cmd_param_list.index(color_range_param)
             )
@@ -337,7 +334,7 @@ class VideoTranscoding(object):
                     ]
                     * 1e4,
                 )
-            if (
+            elif (
                 other_config["input_mastering_display_color_primaries"]
                 == constant.encoder_colorprim_p3
             ):
@@ -546,12 +543,6 @@ class NvencVideoTranscoding(VideoTranscoding):
         nvenc_cmd_param_list = replace_param_template_list(
             nvenc_cmd_param_list, program_param_dict
         )
-        
-        
-        
-        
-        
-        
         nvenc_full_range_param: str = "--fullrange"
         if nvenc_full_range_param in set(nvenc_cmd_param_list):
             if not self._output_full_range_bool:
@@ -568,14 +559,6 @@ class NvencVideoTranscoding(VideoTranscoding):
         else:
             if self._output_full_range_bool:
                 nvenc_full_range_param.append(nvenc_full_range_param)
-        
-        
-        
-        
-        
-        
-        
-        
         self._process_fps_cmd_param(nvenc_cmd_param_list, self._other_config)
         self._process_sar_cmd_param(nvenc_cmd_param_list, self._other_config)
         self._process_hdr_cmd_param(nvenc_cmd_param_list, self._other_config)
@@ -612,12 +595,9 @@ class NvencVideoTranscoding(VideoTranscoding):
 
         process = subprocess.Popen(
             nvenc_cmd_param_list,
-            
         )
-        stderr_lines_deque: deque = deque(maxlen=self.stderr_info_max_line_cnt)
-        while process.poll() is None:
-            pass
-            
+
+        process.communicate()
 
         if process.returncode == 0:
             end_info_str: str = (
@@ -627,11 +607,12 @@ class NvencVideoTranscoding(VideoTranscoding):
             print(end_info_str, file=sys.stderr)
             g_logger.log(logging.INFO, end_info_str)
         else:
-            stderr_str: str = "".join(stderr_lines_deque)
-            stderr_error_info_str: str = (
-                f"transcode nvenc: stderror:\n{stderr_str}"
+            transcode_error_str: str = (
+                f"transcode nvenc: "
+                f"transcoding {output_video_filepath} "
+                f"unsuccessfully."
             )
-            g_logger.log(logging.ERROR, stderr_error_info_str)
+            ChildProcessError(transcode_error_str)
 
         return output_video_filepath
 
@@ -802,7 +783,6 @@ class VspipeVideoTranscoding(FrameServerVideoTranscoding):
             * self._other_config["input_video_height"],
             "4x_input_video_height": 4
             * self._other_config["input_video_height"],
-            
             "first_frame_index": 0 if segment_bool else -1,
             "last_frame_index": int(self._other_config["total_frame_cnt"])
             if segment_bool
@@ -861,25 +841,25 @@ class X265VspipeVideoTranscoding(VspipeVideoTranscoding):
     ):
         if not isinstance(x265_exe_dir, str):
             raise TypeError(
-                f"type of x265_exe_dir must be str \
-instead of {type(x265_exe_dir)}"
+                f"type of x265_exe_dir must be str "
+                f"instead of {type(x265_exe_dir)}"
             )
         if x265_exe_dir:
             if not os.path.isdir(x265_exe_dir):
                 raise DirNotFoundError(
-                    f"vspipe dir cannot be found with {x265_exe_dir}"
+                    f"x265 dir cannot be found with {x265_exe_dir}"
                 )
             all_filename_list: list = os.listdir(x265_exe_dir)
-            if self.vspipe_exe_filename not in all_filename_list:
+            if self.x265_exe_filename not in all_filename_list:
                 raise FileNotFoundError(
-                    f"{self.vspipe_exe_filename} cannot be found in \
-{x265_exe_dir}"
+                    f"{self.x265_exe_filename} cannot be found in "
+                    f"{x265_exe_dir}"
                 )
         else:
-            if not check_file_environ_path({self.vspipe_exe_filename}):
+            if not check_file_environ_path({self.x265_exe_filename}):
                 raise FileNotFoundError(
-                    f"{self.vspipe_exe_filename} cannot be found in \
-environment path"
+                    f"{self.x265_exe_filename} cannot be found in "
+                    f"environment path"
                 )
         self._x265_exe_dir = x265_exe_dir
 
@@ -967,7 +947,6 @@ template {vspipe_x265_template}",
             height,
             self._frame_server_template_config["output_bit_depth"],
         )
-        
         self._process_fps_cmd_param(
             vspipe_x265_cmd_param_list, self._other_config
         )
@@ -1001,24 +980,20 @@ template {vspipe_x265_template}",
         g_logger.log(logging.INFO, start_info_str)
 
         while True:
-            
-            
             process = subprocess.Popen(
                 vspipe_x265_cmd_param_list,
                 stderr=subprocess.PIPE,
                 text=True,
                 shell=True,
                 encoding="utf-8",
+                errors="ignore",
             )
-            
             x265_infor_re_exp: str = (
                 "\\[(\\d+\\.\\d+)%\\] (\\d+)/(\\d+) frames, "
                 "(\\d+.\\d+) fps, (\\d+.\\d+) kb/s, "
                 "(\\d+.\\d+) (KB|MB|GB), eta "
                 "(\\d+:\\d+:\\d+), est.size (\\d+.\\d+) (KB|MB|GB)"
             )
-            
-            
             x265_encode_summary_re_exp: str = (
                 "encoded (\\d+) frames in (\\d+.\\d+)s \\((\\d+.\\d+) fps\\), "
                 "(\\d+.\\d+) kb/s, Avg QP:(\\d+.\\d+)"
@@ -1223,18 +1198,18 @@ class GopX265VspipeVideoTranscoding(X265VspipeVideoTranscoding):
         if gop_muxer_exe_dir:
             if not os.path.isdir(gop_muxer_exe_dir):
                 raise DirNotFoundError(
-                    f"vspipe dir cannot be found with {gop_muxer_exe_dir}"
+                    f"gop_muxer dir cannot be found with {gop_muxer_exe_dir}"
                 )
             all_filename_list: list = os.listdir(gop_muxer_exe_dir)
-            if self.vspipe_exe_filename not in all_filename_list:
+            if self.gop_muxer_exe_filename not in all_filename_list:
                 raise FileNotFoundError(
-                    f"{self.vspipe_exe_filename} cannot be found in "
+                    f"{self.gop_muxer_exe_filename} cannot be found in "
                     f"{gop_muxer_exe_dir}"
                 )
         else:
-            if not check_file_environ_path({self.vspipe_exe_filename}):
+            if not check_file_environ_path({self.gop_muxer_exe_filename}):
                 raise FileNotFoundError(
-                    f"{self.vspipe_exe_filename} cannot be found in "
+                    f"{self.gop_muxer_exe_filename} cannot be found in "
                     f"environment path"
                 )
         self._gop_muxer_exe_dir = gop_muxer_exe_dir
@@ -1265,7 +1240,6 @@ class GopX265VspipeVideoTranscoding(X265VspipeVideoTranscoding):
         self._match_output_fps()
 
     def _match_output_fps(self):
-        
         if self._other_config["output_frame_rate_mode"] == "cfr":
             if self._other_config["frame_rate_mode"] == "vfr":
                 original_fps_info = get_fpsnum_and_fpsden(
@@ -1292,15 +1266,12 @@ class GopX265VspipeVideoTranscoding(X265VspipeVideoTranscoding):
 
             original_fps_float: float = original_fps_info.fps_num / original_fps_info.fps_den
             output_fps_float: float = output_fps_info.fps_num / output_fps_info.fps_den
-            
-            
             self._first_frame_index: int = round(
                 self._first_frame_index * output_fps_float / original_fps_float
             )
             self._last_frame_index: int = round(
                 self._last_frame_index * output_fps_float / original_fps_float
             )
-            
 
     def _init_gop_config(self):
         self._gop_cache_filename: str = (
@@ -1308,8 +1279,6 @@ class GopX265VspipeVideoTranscoding(X265VspipeVideoTranscoding):
             + f"_{self._first_frame_index}_{self._last_frame_index}"
         )
         self._gop_cache_filename = hash_name(self._gop_cache_filename)
-        
-        
         self._gop_cache_dir: str = os.path.join(
             self._orginal_frame_server_script_cache_dir,
             self._gop_cache_filename,
@@ -1373,7 +1342,6 @@ class GopX265VspipeVideoTranscoding(X265VspipeVideoTranscoding):
             self._frame_server_template_config[
                 "last_frame_index"
             ] = last_frame_index
-            
             self._frame_server_script_cache_dir = self._gop_cache_dir
             self._output_video_dir = self._gop_cache_dir
 
@@ -1420,7 +1388,6 @@ class GopX265VspipeVideoTranscoding(X265VspipeVideoTranscoding):
             self._original_output_video_dir, real_output_video_filename
         )
         gop_muxer_cmd_param_list: list = [gop_muxer_filepath]
-        
         gop_muxer_cmd_param_list += self._all_gop_filepath_list
         gop_muxer_cmd_param_list.append(output_video_filepath)
 
@@ -1447,14 +1414,16 @@ class GopX265VspipeVideoTranscoding(X265VspipeVideoTranscoding):
         process.wait()
 
         if process.returncode == 0:
-            end_info_str: str = f"transcode x265 gop_muxer: \
-muxing {real_output_video_filepath} successfully."
+            end_info_str: str = (
+                f"transcode x265 gop_muxer: "
+                f"muxing {real_output_video_filepath} successfully."
+            )
             print(end_info_str, file=sys.stderr)
             g_logger.log(logging.INFO, end_info_str)
         else:
             raise RuntimeError(
-                f"transcode x265 gop_muxer: \
-muxing {real_output_video_filepath} unsuccessfully."
+                f"transcode x265 gop_muxer: "
+                f"muxing {real_output_video_filepath} unsuccessfully."
             )
 
         return real_output_video_filepath
@@ -1720,8 +1689,6 @@ class SegmentedConfigX265VspipeTranscoding(GopX265VspipeVideoTranscoding):
                 file=sys.stderr,
             )
             print("", file=sys.stderr)
-        
-        
 
         hash_str_length: int = 6
         assumptive_path_length: int = len(
@@ -1738,7 +1705,6 @@ class SegmentedConfigX265VspipeTranscoding(GopX265VspipeVideoTranscoding):
                 "Cache dir length is too long to save gop data. "
                 "Please decrease cache dir length!"
             )
-        
         assumptive_cmd_length: int = len(
             general_segmented_transcode_config_list
         ) * (
@@ -1764,8 +1730,6 @@ class SegmentedConfigX265VspipeTranscoding(GopX265VspipeVideoTranscoding):
                 "or "
                 "Please decrease cache dir length!"
             )
-        
-        
 
         self._general_segmented_transcode_config_list = (
             general_segmented_transcode_config_list
@@ -1781,9 +1745,7 @@ class SegmentedConfigX265VspipeTranscoding(GopX265VspipeVideoTranscoding):
             self._last_frame_index = config["frame_interval_dict"][
                 "last_frame_index"
             ]
-            
             self._match_output_fps()
-            
             self._transcoding_cmd_param_template = config[
                 "video_transcoding_cmd_param_template"
             ]
@@ -1855,25 +1817,25 @@ class X264VspipeVideoTranscoding(VspipeVideoTranscoding):
     ):
         if not isinstance(x264_exe_dir, str):
             raise TypeError(
-                f"type of x264_exe_dir must be str \
-instead of {type(x264_exe_dir)}"
+                f"type of x264_exe_dir must be str "
+                f"instead of {type(x264_exe_dir)}"
             )
         if x264_exe_dir:
             if not os.path.isdir(x264_exe_dir):
                 raise DirNotFoundError(
-                    f"vspipe dir cannot be found with {x264_exe_dir}"
+                    f"x264 dir cannot be found with {x264_exe_dir}"
                 )
             all_filename_list: list = os.listdir(x264_exe_dir)
-            if self.vspipe_exe_filename not in all_filename_list:
+            if self.x264_exe_filename not in all_filename_list:
                 raise FileNotFoundError(
-                    f"{self.vspipe_exe_filename} cannot be found in \
-{x264_exe_dir}"
+                    f"{self.x264_exe_filename} cannot be found in "
+                    f"{x264_exe_dir}"
                 )
         else:
-            if not check_file_environ_path({self.vspipe_exe_filename}):
+            if not check_file_environ_path({self.x264_exe_filename}):
                 raise FileNotFoundError(
-                    f"{self.vspipe_exe_filename} cannot be found in \
-environment path"
+                    f"{self.x264_exe_filename} cannot be found in "
+                    f"environment path"
                 )
         self._x264_exe_dir = x264_exe_dir
 
@@ -1902,13 +1864,22 @@ environment path"
                     missing_template=vspipe_x264_template,
                 )
 
+        self._delete_cache_files()
+
+    def _delete_cache_files(self):
+        constant = global_constant()
+        lwi_extension: str = (
+            constant.vapoursynth_lwlibavsource_cache_file_extension
+        )
+        lwi_filepath: str = self._input_video_filepath + lwi_extension
+        if os.path.isfile(lwi_filepath):
+            os.remove(lwi_filepath)
+
     def transcode(self):
         self._generate_vpy_script()
         x264_exe_filepath: str = os.path.join(
             self._x264_exe_dir,
             self.x264_exe_filename
-            
-            
         )
 
         output_video_fullname: str = (
@@ -1931,7 +1902,6 @@ environment path"
         vspipe_x264_cmd_param_list = replace_param_template_list(
             self._transcoding_cmd_param_template, program_param_dict
         )
-        
         vspipe_progress_param_list: list = ["--progress", "-p"]
         exist_bool: bool = any(
             param in vspipe_progress_param_list
@@ -1957,7 +1927,6 @@ environment path"
             height,
             self._frame_server_template_config["output_bit_depth"],
         )
-        
         self._process_fps_cmd_param(
             vspipe_x264_cmd_param_list, self._other_config
         )
@@ -1986,6 +1955,9 @@ environment path"
         if os.path.isfile(x264_log_filepath):
             os.remove(x264_log_filepath)
 
+        if os.path.isfile(output_video_filepath):
+            os.remove(output_video_filepath)
+
         vspipe_x264_cmd_param_list = self._cmd_param_list_element_2_str(
             vspipe_x264_cmd_param_list
         )
@@ -2004,24 +1976,20 @@ environment path"
         g_logger.log(logging.INFO, start_info_str)
 
         while True:
-            
-            
             process = subprocess.Popen(
                 vspipe_x264_cmd_param_list,
                 stderr=subprocess.PIPE,
                 text=True,
                 shell=True,
                 encoding="utf-8",
+                errors="ignore",
             )
             vspipe_infor_re_exp: str = r"Frame: (\d+)/(\d+)"
-            
             x264_infor_re_exp: str = (
                 "(\\d+) frames: (\\d+.\\d+) fps, (\\d+.\\d+) kb/s"
             )
-            
-            
             x264_encode_summary_re_exp: str = (
-                "encoded (\\d+) frames, (\\d+.\\d+) fps, (\\d+.\\d+) kb/s"
+                "encoded (\\d+) frames, (\\d+\\.\\d+) fps, (\\d+\\.\\d+) kb/s"
             )
 
             total_frame_cnt: int = -1
@@ -2044,7 +2012,8 @@ environment path"
 
             print(
                 (
-                    f"{frame_hint_str:^19} {percent_hint_str:^10} {fps_hint_str:^12} "
+                    f"{frame_hint_str:^19} {percent_hint_str:^10} "
+                    f"{fps_hint_str:^12} "
                     f"{bitrate_hint_str:^18} {remain_hint_str:^14}"
                 ),
                 end="\n",
@@ -2061,11 +2030,14 @@ environment path"
                 if re_result:
                     vspipe_processed_frame = int(re_result.group(1))
                     total_frame_cnt = int(re_result.group(2))
+
                 re_result = re.search(x264_infor_re_exp, current_line)
                 if re_result:
                     x264_encoded_frame = int(re_result.group(1))
+
                     ave_fps = float(re_result.group(2))
                     ave_bitrate = float(re_result.group(3))
+
                 re_result = re.search(x264_encode_summary_re_exp, current_line)
                 if re_result:
                     all_encoded_frame = int(re_result.group(1))
@@ -2182,18 +2154,18 @@ class NvencVspipeVideoTranscoding(VspipeVideoTranscoding):
         if nvenc_exe_dir:
             if not os.path.isdir(nvenc_exe_dir):
                 raise DirNotFoundError(
-                    f"vspipe dir cannot be found with {nvenc_exe_dir}"
+                    f"nvenc dir cannot be found with {nvenc_exe_dir}"
                 )
             all_filename_list: list = os.listdir(nvenc_exe_dir)
-            if self.vspipe_exe_filename not in all_filename_list:
+            if self.nvenc_exe_filename not in all_filename_list:
                 raise FileNotFoundError(
-                    f"{self.vspipe_exe_filename} cannot be found in "
+                    f"{self.nvenc_exe_filename} cannot be found in "
                     f"{nvenc_exe_dir}"
                 )
         else:
-            if not check_file_environ_path({self.vspipe_exe_filename}):
+            if not check_file_environ_path({self.nvenc_exe_filename}):
                 raise FileNotFoundError(
-                    f"{self.vspipe_exe_filename} cannot be found in "
+                    f"{self.nvenc_exe_filename} cannot be found in "
                     f"environment path"
                 )
         self._nvenc_exe_dir = nvenc_exe_dir
@@ -2302,13 +2274,6 @@ class NvencVspipeVideoTranscoding(VspipeVideoTranscoding):
         else:
             if self._output_full_range_bool:
                 nvenc_full_range_param.append(nvenc_full_range_param)
-        
-        
-        
-        
-        
-        
-        
         width: int = self._vpy_template_dict["output_width"]
         height: int = self._vpy_template_dict["output_height"]
         vspipe_nvenc_cmd_param_list += self.color_matrix_cmd_params(
@@ -2316,7 +2281,6 @@ class NvencVspipeVideoTranscoding(VspipeVideoTranscoding):
             height,
             self._frame_server_template_config["output_bit_depth"],
         )
-        
         self._process_fps_cmd_param(
             vspipe_nvenc_cmd_param_list, self._other_config
         )
@@ -2359,12 +2323,8 @@ class NvencVspipeVideoTranscoding(VspipeVideoTranscoding):
 
         while True:
             process = subprocess.Popen(vspipe_nvenc_cmd_param_list, shell=True)
-            stderr_lines_deque: deque = deque(
-                maxlen=self.stderr_info_max_line_cnt
-            )
-            while process.poll() is None:
-                pass
-                
+
+            process.communicate()
 
             if process.returncode == 0:
                 end_info_str: str = (
@@ -2374,12 +2334,6 @@ class NvencVspipeVideoTranscoding(VspipeVideoTranscoding):
                 print(end_info_str, file=sys.stderr)
                 g_logger.log(logging.INFO, end_info_str)
                 break
-
-            stderr_str: str = "".join(stderr_lines_deque)
-            stderr_error_info_str: str = (
-                f"transcode vspipe nvenc: stderror:\n{stderr_str}"
-            )
-            g_logger.log(logging.ERROR, stderr_error_info_str)
             transcode_error_str: str = (
                 f"transcode vspipe nvenc: "
                 f"transcoding {output_video_filepath} "

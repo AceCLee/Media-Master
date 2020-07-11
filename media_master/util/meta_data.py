@@ -186,11 +186,6 @@ def get_colorspace_specification(width: int, height: int, bit_depth: int):
     bt2020_available_bit_depth_tuple: tuple = (
         constant.bt2020_available_bit_depth_tuple
     )
-    
-    
-    
-    
-    
 
     bt2020_transfer: str = constant.encoder_transfer_smpte2084
 
@@ -443,7 +438,11 @@ def edit_mkv_prop(
     g_logger.log(logging.INFO, start_info_str)
 
     process = subprocess.Popen(
-        cmd_param_list, stdout=subprocess.PIPE, text=True, encoding="utf-8"
+        cmd_param_list,
+        stdout=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="ignore",
     )
 
     stdout_lines: list = []

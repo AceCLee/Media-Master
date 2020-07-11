@@ -332,56 +332,56 @@ def transcode_audio_opus(
 ) -> str:
     if not isinstance(input_audio_filepath, str):
         raise TypeError(
-            f"type of input_audio_filepath must be str \
-instead of {type(input_audio_filepath)}"
+            f"type of input_audio_filepath must be str "
+            f"instead of {type(input_audio_filepath)}"
         )
 
     if not isinstance(output_audio_dir, str):
         raise TypeError(
-            f"type of output_audio_dir must be str \
-instead of {type(output_audio_dir)}"
+            f"type of output_audio_dir must be str "
+            f"instead of {type(output_audio_dir)}"
         )
 
     if not isinstance(output_audio_name, str):
         raise TypeError(
-            f"type of output_audio_name must be str \
-instead of {type(output_audio_name)}"
+            f"type of output_audio_name must be str "
+            f"instead of {type(output_audio_name)}"
         )
 
     if not isinstance(opus_exe_config_list, list):
         raise TypeError(
-            f"type of opus_exe_config_list must be list \
-instead of {type(opus_exe_config_list)}"
+            f"type of opus_exe_config_list must be list "
+            f"instead of {type(opus_exe_config_list)}"
         )
 
     if (not isinstance(bitrate, float)) and (not isinstance(bitrate, int)):
         raise TypeError(
-            f"type of bitrate must be float or int \
-instead of {type(bitrate)}"
+            f"type of bitrate must be float or int "
+            f"instead of {type(bitrate)}"
         )
 
     if not isinstance(computational_complexity, int):
         raise TypeError(
-            f"type of computational_complexity must be int \
-instead of {type(computational_complexity)}"
+            f"type of computational_complexity must be int "
+            f"instead of {type(computational_complexity)}"
         )
 
     if not isinstance(expect_loss, int):
         raise TypeError(
-            f"type of expect_loss must be int \
-instead of {type(expect_loss)}"
+            f"type of expect_loss must be int "
+            f"instead of {type(expect_loss)}"
         )
 
     if not isinstance(opus_exe_file_dir, str):
         raise TypeError(
-            f"type of opus_exe_file_dir must be str \
-instead of {type(opus_exe_file_dir)}"
+            f"type of opus_exe_file_dir must be str "
+            f"instead of {type(opus_exe_file_dir)}"
         )
 
     if not isinstance(ffmpeg_exe_file_dir, str):
         raise TypeError(
-            f"type of ffmpeg_exe_file_dir must be str \
-instead of {type(ffmpeg_exe_file_dir)}"
+            f"type of ffmpeg_exe_file_dir must be str "
+            f"instead of {type(ffmpeg_exe_file_dir)}"
         )
     if not os.path.exists(input_audio_filepath):
         raise FileNotFoundError(
@@ -400,14 +400,14 @@ instead of {type(ffmpeg_exe_file_dir)}"
         for opus_exe_name in opus_exe_name_set:
             if opus_exe_name not in all_filename_list:
                 raise FileNotFoundError(
-                    f"{opus_exe_name} cannot be found in \
-{opus_exe_file_dir}"
+                    f"{opus_exe_name} cannot be found in "
+                    f"{opus_exe_file_dir}"
                 )
     else:
         if not check_file_environ_path(opus_exe_name_set):
             raise FileNotFoundError(
-                f"at least one of {opus_exe_name_set} cannot \
-be found in environment path"
+                f"at least one of {opus_exe_name_set} cannot "
+                f"be found in environment path"
             )
     if bitrate < 0:
         raise RangeError(
@@ -501,6 +501,7 @@ be found in environment path"
         shell=True,
         text=True,
         encoding="utf-8",
+        errors="ignore",
     )
 
     opusenc_infor_re_exp: str = "(\\d{1,3})% \
@@ -724,14 +725,16 @@ def transcode_audio_qaac(
     process.wait()
 
     if process.returncode == 0:
-        end_info_str: str = f"audio qaac: transcode {input_audio_filepath} to \
-{output_filepath} successfully."
+        end_info_str: str = (
+            f"audio qaac: transcode {input_audio_filepath} to "
+            f"{output_filepath} successfully."
+        )
         print(end_info_str, file=sys.stderr)
         g_logger.log(logging.INFO, end_info_str)
     else:
         raise ChildProcessError(
-            f"audio qaac: transcode {input_audio_filepath} to \
-{output_filepath} unsuccessfully!"
+            f"audio qaac: transcode {input_audio_filepath} to "
+            f"{output_filepath} unsuccessfully!"
         )
     if delete_input_file_bool and not os.path.samefile(
         input_audio_filepath, output_filepath
@@ -802,6 +805,7 @@ instead of {type(flac_exe_file_dir)}"
         stderr=subprocess.PIPE,
         text=True,
         encoding="utf-8",
+        errors="ignore",
     )
 
     stdout_data, stderr_data = process.communicate()

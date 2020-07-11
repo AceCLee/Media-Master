@@ -61,6 +61,9 @@ from .util import (
     get_proper_color_specification,
     is_iso_language,
     global_constant,
+    convert_codec_2_uft8bom,
+    get_uninstalled_font_set,
+    get_vsmod_improper_style,
 )
 from .video import (
     GopX265VspipeVideoTranscoding,
@@ -517,12 +520,14 @@ class CompleteVideoTranscoding(object):
                         ].delay_ms = int(
                             external_audio_info["delay_ms"][index]
                         )
-                        current_all_audio_track_file_list[
-                            index
-                        ].title = external_audio_info["title"][index]
-                        current_all_audio_track_file_list[
-                            index
-                        ].language = external_audio_info["language"][index]
+                        if external_audio_info["title"][index]:
+                            current_all_audio_track_file_list[
+                                index
+                            ].title = external_audio_info["title"][index]
+                        if external_audio_info["language"][index]:
+                            current_all_audio_track_file_list[
+                                index
+                            ].language = external_audio_info["language"][index]
                     external_audio_track_file_list.extend(
                         current_all_audio_track_file_list
                     )
@@ -649,12 +654,14 @@ class CompleteVideoTranscoding(object):
                     current_all_subtitle_track_file_list[index].delay_ms = int(
                         external_subtitle_info["delay_ms"][index]
                     )
-                    current_all_subtitle_track_file_list[
-                        index
-                    ].title = external_subtitle_info["title"][index]
-                    current_all_subtitle_track_file_list[
-                        index
-                    ].language = external_subtitle_info["language"][index]
+                    if external_subtitle_info["title"][index]:
+                        current_all_subtitle_track_file_list[
+                            index
+                        ].title = external_subtitle_info["title"][index]
+                    if external_subtitle_info["language"][index]:
+                        current_all_subtitle_track_file_list[
+                            index
+                        ].language = external_subtitle_info["language"][index]
                 external_text_track_file_list.extend(
                     current_all_subtitle_track_file_list
                 )
@@ -761,7 +768,7 @@ class CompleteVideoTranscoding(object):
                     self._config.external_chapter_info["filepath"],
                     self._cache_dir,
                     self._cache_media_filename,
-                    chapter_format=dst_chapter_filepath,
+                    chapter_format=dst_chapter_format,
                 )
                 if self._menu_track_file is None:
                     raise RuntimeError(
@@ -793,10 +800,6 @@ class CompleteVideoTranscoding(object):
             )
 
     def _video_stream_process(self):
-        self._thread_lock.acquire()
-        self._state_info_dict["video_stream"]["io_complete"] = True
-        self._thread_lock.release()
-
         self._video_timecode_filepath: str = ""
         self._first_multiplex_mkv_bool: bool = False
 
@@ -807,6 +810,11 @@ class CompleteVideoTranscoding(object):
                     output_file_dir=self._cache_dir,
                     output_file_name=self._cache_media_filename,
                 )
+
+                self._thread_lock.acquire()
+                self._state_info_dict["video_stream"]["io_complete"] = True
+                self._thread_lock.release()
+
                 if self._video_track_file.frame_rate_mode == "vfr":
                     self._video_timecode_filepath = extract_mkv_video_timecode(
                         filepath=self._input_video_filepath,
@@ -816,6 +824,10 @@ class CompleteVideoTranscoding(object):
                     self._first_multiplex_mkv_bool = True
                 self._remove_filepath_set.add(self._video_track_file.filepath)
             else:
+                self._thread_lock.acquire()
+                self._state_info_dict["video_stream"]["io_complete"] = True
+                self._thread_lock.release()
+
                 media_info_list: list = MediaInfo.parse(
                     self._input_video_filepath
                 ).to_data()["tracks"]
@@ -873,9 +885,7 @@ class CompleteVideoTranscoding(object):
                     sample_aspect_ratio=video_info_dict["pixel_aspect_ratio"]
                     if "pixel_aspect_ratio" in video_info_dict.keys()
                     else 1,
-                    delay_ms=int(float(video_info_dict["delay"]))
-                    if "delay" in video_info_dict.keys()
-                    else 0,
+                    delay_ms=0,
                     stream_size_byte=int(video_info_dict["stream_size"])
                     if "stream_size" in video_info_dict.keys()
                     else -1,
@@ -910,6 +920,10 @@ class CompleteVideoTranscoding(object):
                 output_file_name=self._cache_media_filename,
                 using_original_if_possible=self._pre_multiplex_bool,
             )
+
+            self._thread_lock.acquire()
+            self._state_info_dict["video_stream"]["io_complete"] = True
+            self._thread_lock.release()
 
             if self._video_track_file.filepath != self._input_video_filepath:
                 self._remove_filepath_set.add(self._video_track_file.filepath)
@@ -1146,19 +1160,6 @@ class CompleteVideoTranscoding(object):
                 ),
                 None,
             )
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
 
             self._output_video_track_file = copy.deepcopy(
                 self._video_track_file
@@ -1166,6 +1167,7 @@ class CompleteVideoTranscoding(object):
             self._output_video_track_file.filepath = (
                 compressed_video_cache_filepath
             )
+            self._output_video_track_file.track_index = 0
             self._remove_filepath_set.add(compressed_video_cache_filepath)
 
         self._output_video_track_file.color_range = (
@@ -1253,7 +1255,6 @@ class CompleteVideoTranscoding(object):
             )
 
     def _delete_cache_file(self):
-        
         origin_video_cache_filename: str = os.path.basename(
             self._video_track_file.filepath
         )
@@ -1328,7 +1329,8 @@ class SeriesVideoTranscoding(object):
                 episode: str = str(int(re_result.group(1)))
                 if episode in video_info.keys():
                     raise RuntimeError(
-                        f"repetitive episode {episode} in {self._input_video_dir}"
+                        f"repetitive episode {episode} "
+                        f"in {self._input_video_dir}"
                     )
                 video_info[episode] = dict(
                     filepath=os.path.join(self._input_video_dir, filename)
@@ -1351,8 +1353,8 @@ class SeriesVideoTranscoding(object):
                     episode: str = re_result.group(1)
                     if episode in subtitle_info.keys():
                         raise RuntimeError(
-                            f"repetitive episode in \
-{external_subtitle_info['subtitle_dir']}"
+                            f"repetitive episode in "
+                            f"{external_subtitle_info['subtitle_dir']}"
                         )
                     subtitle_info[str(int(episode))] = dict(
                         filepath=os.path.join(
@@ -1683,6 +1685,7 @@ def config_pre_check(one_mission_config: dict, all_output_filepath_set: set):
                     f"{external_subtitle_info['filepath']} "
                     f"is not a file."
                 )
+            convert_codec_2_uft8bom(external_subtitle_info["filepath"])
             if isinstance(external_subtitle_info["language"], str):
                 if not is_available_language(
                     external_subtitle_info["language"]
@@ -1782,6 +1785,16 @@ def config_pre_check(one_mission_config: dict, all_output_filepath_set: set):
                     f"can not match filename in "
                     f"{external_subtitle_info['subtitle_dir']}"
                 )
+
+            for filename in os.listdir(external_subtitle_info["subtitle_dir"]):
+                if re.search(
+                    external_subtitle_info["subtitle_filename_reexp"], filename
+                ):
+                    convert_codec_2_uft8bom(
+                        os.path.join(
+                            external_subtitle_info["subtitle_dir"], filename
+                        )
+                    )
 
             if isinstance(external_subtitle_info["language"], str):
                 if not is_available_language(
@@ -1932,6 +1945,30 @@ def config_pre_check(one_mission_config: dict, all_output_filepath_set: set):
                     f"subtitle_filepath in frame_server_template_config: "
                     f"{config['frame_server_template_config']['subtitle_filepath']} "
                     f"is not a file."
+                )
+
+            convert_codec_2_uft8bom(
+                config["frame_server_template_config"]["subtitle_filepath"]
+            )
+
+            uninstalled_font_set: set = get_uninstalled_font_set(
+                config["frame_server_template_config"]["subtitle_filepath"]
+            )
+            if uninstalled_font_set:
+                raise ValueError(
+                    f"{uninstalled_font_set} in "
+                    f"{config['frame_server_template_config']['subtitle_filepath']} "
+                    f"do not exist."
+                )
+
+            improper_style_set: set = get_vsmod_improper_style(
+                config["frame_server_template_config"]["subtitle_filepath"]
+            )
+            if improper_style_set:
+                raise ValueError(
+                    f"{improper_style_set} in "
+                    f"{config['frame_server_template_config']['subtitle_filepath']} "
+                    f"is improper style(s)."
                 )
 
     available_video_transcoding_method_set: set = constant.available_video_transcoding_method_set
@@ -2117,8 +2154,6 @@ def transcode_all_missions(
         f"main logger {main_logger} successfully."
     )
     g_logger.log(logging.INFO, main_logger_init_info_str)
-    
-    
 
     time.sleep(basic_config_dict["delay_start_sec"])
 
@@ -2126,24 +2161,24 @@ def transcode_all_missions(
     all_output_filepath_set: set = set()
     new_all_mission_config_list: list = []
     for mission_config in all_mission_config_list:
-        mission_config["universal_config"] = dict(
+        mission_config["general_config"] = dict(
             dict(
-                cache_dir=mission_config["universal_config"]["cache_dir"],
-                package_format=mission_config["universal_config"][
+                cache_dir=mission_config["general_config"]["cache_dir"],
+                package_format=mission_config["general_config"][
                     "package_format"
                 ],
-                thread_bool=mission_config["universal_config"]["thread_bool"],
+                thread_bool=mission_config["general_config"]["thread_bool"],
             ),
-            **mission_config["universal_config"]["video_related_config"],
-            **mission_config["universal_config"]["audio_related_config"],
-            **mission_config["universal_config"]["subtitle_related_config"],
-            **mission_config["universal_config"]["chapter_related_config"],
-            **mission_config["universal_config"]["attachment_related_config"],
+            **mission_config["general_config"]["video_related_config"],
+            **mission_config["general_config"]["audio_related_config"],
+            **mission_config["general_config"]["subtitle_related_config"],
+            **mission_config["general_config"]["chapter_related_config"],
+            **mission_config["general_config"]["attachment_related_config"],
         )
         mission_config = dict(
             dict(type=mission_config["type"]),
             **mission_config["type_related_config"],
-            **mission_config["universal_config"],
+            **mission_config["general_config"],
         )
 
         config_pre_check(
@@ -2235,24 +2270,6 @@ def transcode_all_missions(
             )
             g_logger.log(logging.WARNING, warning_str)
             warnings.warn(warning_str, RuntimeWarning)
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-
-        
-        
-        
-        
-        
-        
-        
 
         Config: namedtuple = namedtuple("Config", sorted(mission_config))
         mission_config: namedtuple = Config(**mission_config)

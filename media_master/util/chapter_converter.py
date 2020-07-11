@@ -1,4 +1,4 @@
-
+# https://github.com/fireattack/chapter_converter
 
 from subprocess import run
 import argparse
@@ -91,7 +91,6 @@ def main():
     else:
         print("Input file missing or invalid!")
         raise RuntimeError("Input file missing or invalid!")
-
     lines = list(filter(lambda x: not re.match(r"^\s*$", x), lines))
     input_format = ""
     SIMPLE_RE = r"(.+?), *(.+)"
@@ -121,7 +120,7 @@ def main():
                 chapters.append((m.group(1), m.group(2)))
     elif input_format == "ogm":
         for i in range(0, len(lines), 2):
-            line1 = lines[i].strip()  
+            line1 = lines[i].strip()
             line2 = lines[i + 1].strip()
             chapters.append(
                 (line1[line1.index("=") + 1 :], line2[line2.index("=") + 1 :])

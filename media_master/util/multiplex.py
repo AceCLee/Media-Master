@@ -401,7 +401,6 @@ def multiplex_mkv(
             track_name: str = track_info_dict["track_name"]
             language: str = track_info_dict["language"]
             timestamp_filepath: str = track_info_dict["timestamp_filepath"]
-            
             track_key: str = video_track_key if track_type == video_track_type else (
                 audio_track_key
                 if track_type == audio_track_type
@@ -467,10 +466,12 @@ def multiplex_mkv(
 
     print(start_info_str, file=sys.stderr)
     g_logger.log(logging.INFO, start_info_str)
-    
-    
     process = subprocess.Popen(
-        cmd_param_list, stdout=subprocess.PIPE, text=True, encoding="utf-8"
+        cmd_param_list,
+        stdout=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="ignore",
     )
 
     stdout_lines: list = []
@@ -480,11 +481,6 @@ def multiplex_mkv(
         print(stdout_line, end="", file=sys.stderr)
 
     return_code = process.returncode
-    
-    
-    
-    
-    
 
     if return_code == 0:
         end_info_str: str = (
@@ -629,7 +625,7 @@ def multiplex_mp4(
     force_new_file_key: str = "-new"
     output_value: str = os.path.abspath(output_filepath)
     add_key: str = "-add"
-    track_id_option_key: str = "
+    track_id_option_key: str = "#trackID="
     language_option_key: str = ":lang="
     delay_ms_option_key: str = ":delay="
     track_name_option_key: str = ":name="

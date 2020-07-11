@@ -37,20 +37,19 @@ def video_frame_info(
 ) -> str:
     if not isinstance(input_filepath, str):
         raise TypeError(
-            f"type of input_filepath must be str \
-instead of {type(input_filepath)}"
+            f"type of input_filepath must be str "
+            f"instead of {type(input_filepath)}"
         )
 
     if not isinstance(thread_num, int):
         raise TypeError(
-            f"type of thread_num must be int \
-instead of {type(thread_num)}"
+            f"type of thread_num must be int instead of {type(thread_num)}"
         )
 
     if not isinstance(ffprobe_exe_file_dir, str):
         raise TypeError(
-            f"type of ffprobe_exe_file_dir must be str \
-instead of {type(ffprobe_exe_file_dir)}"
+            f"type of ffprobe_exe_file_dir must be str "
+            f"instead of {type(ffprobe_exe_file_dir)}"
         )
     if not os.path.isfile(input_filepath):
         raise FileNotFoundError(
@@ -66,14 +65,14 @@ instead of {type(ffprobe_exe_file_dir)}"
         all_filename_list: list = os.listdir(ffprobe_exe_file_dir)
         if ffprobe_exe_filename not in all_filename_list:
             raise FileNotFoundError(
-                f"{ffprobe_exe_filename} cannot be found in \
-{ffprobe_exe_file_dir}"
+                f"{ffprobe_exe_filename} cannot be found in "
+                f"{ffprobe_exe_file_dir}"
             )
     else:
         if not check_file_environ_path({ffprobe_exe_filename}):
             raise FileNotFoundError(
-                f"{ffprobe_exe_filename} cannot be found in \
-environment path"
+                f"{ffprobe_exe_filename} cannot be found in "
+                f"environment path"
             )
 
     ffprobe_exe_filepath: str = os.path.join(
@@ -90,8 +89,10 @@ environment path"
     )
     output_filepath: str = output_csv_filepath
     if os.path.isfile(output_filepath):
-        skip_info_str: str = f"video_frame_info: {output_filepath} \
-already existed, skip analysis."
+        skip_info_str: str = (
+            f"video_frame_info: {output_filepath} "
+            "already existed, skip analysis."
+        )
 
         print(skip_info_str, file=sys.stderr)
         g_logger.log(logging.INFO, skip_info_str)
@@ -124,31 +125,32 @@ already existed, skip analysis."
         output_filepath,
     ]
 
-    ffmpeg_param_debug_str: str = f"video_frame_info: param:\
-{subprocess.list2cmdline(args_list)}"
+    ffmpeg_param_debug_str: str = (
+        f"video_frame_info: param: {subprocess.list2cmdline(args_list)}"
+    )
     print(ffmpeg_param_debug_str, file=sys.stderr)
     g_logger.log(logging.DEBUG, ffmpeg_param_debug_str)
 
-    start_info_str: str = f"video_frame_info: start to analyse \
-{input_filepath} to {output_filepath}"
+    start_info_str: str = (
+        f"video_frame_info: start to analyse "
+        f"{input_filepath} to {output_filepath}"
+    )
 
     print(start_info_str, file=sys.stderr)
     g_logger.log(logging.INFO, start_info_str)
-    
-    
     process = subprocess.Popen(args_list, shell=True)
 
     return_code = process.wait()
 
     if return_code == 0:
-        end_info_str: str = f"video_frame_info: \
-analyse {output_filepath} successfully."
+        end_info_str: str = (
+            f"video_frame_info: analyse {output_filepath} successfully."
+        )
         print(end_info_str, file=sys.stderr)
         g_logger.log(logging.INFO, end_info_str)
     else:
         raise ChildProcessError(
-            f"video_frame_info: \
-analyse {output_filepath} unsuccessfully."
+            f"video_frame_info: analyse {output_filepath} unsuccessfully."
         )
 
     return output_filepath
@@ -176,6 +178,7 @@ def save_high_bitrate_gop_info(
     csv_text = csv_text.replace("\n\n\n", "\n")
     with open(csv_filepath, mode="w") as csv_file:
         csv_file.write(csv_text)
+
     unknown_name_list: list = [f"unknown{index}" for index in range(10)]
     original_frame_df: pd.DataFrame = pd.read_csv(
         csv_filepath,
@@ -246,7 +249,6 @@ def save_high_bitrate_gop_info(
         mean: float = frame_df["pkt_size"][index:next_index].values.mean()
         frame_df.iloc[index, 2] = mean
         frame_df.iloc[index, 3] = int(next_index)
-        
 
     output_list: list = []
     for key in config["multiple_config"].keys():
@@ -262,7 +264,6 @@ def save_high_bitrate_gop_info(
             re_result = re.search(re_exp, key)
             multiple_min = float(re_result.group(1))
             multiple_max = float(re_result.group(2))
-        
         if multiple_max != -1:
             if multiple_min == 0:
                 multiple_min = 0.01

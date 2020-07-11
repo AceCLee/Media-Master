@@ -45,4 +45,9 @@ if not vfr_bool:
 else:
     original: vs.VideoNode = core.lsmas.LWLibavSource(file_path)
 
-original[first_frame_index:last_frame_index].set_output()
+output = original
+
+if first_frame_index != -1 and last_frame_index != -1:
+    output = output[first_frame_index : last_frame_index + 1]
+
+output.set_output()

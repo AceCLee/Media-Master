@@ -33,3 +33,5 @@ from .template import (
     replace_param_template_list,
 )
 from .timecode import mkv_timecode_2_standard_timecode
+from .charset import convert_codec_2_uft8bom
+from .subtitle import get_uninstalled_font_set, get_vsmod_improper_style
