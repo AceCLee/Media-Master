@@ -30,6 +30,8 @@ vfr_bool = {{vfr_bool}}
 
 timecode_filepath = "{{timecode_filepath}}"
 
+hardcoded_subtitle_filepath = "{{hardcoded_subtitle_filepath}}"
+
 
 first_frame_index = {{first_frame_index}}
 last_frame_index = {{last_frame_index}}
@@ -39,11 +41,11 @@ core.num_threads = threads_num
 core.max_cache_size = max_memory_size_mb
 
 if not vfr_bool:
-    original: vs.VideoNode = core.lsmas.LWLibavSource(
+    original = core.lsmas.LWLibavSource(
         file_path, fpsnum=fps_num, fpsden=fps_den
     )
 else:
-    original: vs.VideoNode = core.lsmas.LWLibavSource(file_path)
+    original = core.lsmas.LWLibavSource(file_path)
 
 output = original
 

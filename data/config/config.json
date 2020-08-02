@@ -12,6 +12,9 @@
             "external_chapter_info": {
                 "filepath": ""
             },
+            "hardcoded_subtitle_info": {
+                "filepath": ""
+            },
             "segmented_transcode_config_list": [],
             "output_video_dir": "A:/xxxx/",
             "output_video_name": "xxxx"
@@ -46,7 +49,7 @@
                     "vfr_bool": "{{vfr_bool}}",
                     "output_chroma_subsampling": "420",
                     "subtitle_bool": true,
-                    "subtitle_filepath": "A:/xxxx//xxxx.ass",
+                    "subtitle_filepath": "{{hardcoded_subtitle_filepath}}",
                     "timecode_filepath": "{{timecode_filepath}}",
                     "first_frame_index": "{{first_frame_index}}",
                     "last_frame_index": "{{last_frame_index}}"

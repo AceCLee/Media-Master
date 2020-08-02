@@ -23,6 +23,8 @@ import chardet
 import pysubs2
 from fontTools import ttLib
 from fontTools.ttLib.sfnt import readTTCHeader
+import copy
+import struct
 
 from .config import load_config, save_config
 
@@ -149,55 +151,200 @@ def dir_font_info(
     return font_info_dict["font_info_list"]
 
 
-def get_uninstalled_font_set(
-    subtitle_filepath: str, input_encoding="utf-8"
-) -> set:
-    subs = pysubs2.load(subtitle_filepath, encoding=input_encoding)
+def ass_string_style_font_text(string):
+    override_block_re_exp: str = "(\\{[^\\{\\}]+?\\})"
+    font_name_override_tag_re_exp: str = "\\\\fn(?P<font_name>[^\\\\{\\}]*?)(\\\\|\})"
 
-    all_style_name_set: set = set(subs.styles.keys())
-
-    used_style_name_set: set = set()
-    used_font_name_set: set = set()
-
-    font_name_override_tag_re_exp: str = "\\\\fn(?P<font_name>[^\\\\{\\}]+?)(\\\\|\})"
-    line_font_name_override_tag_re_exp: str = "^\\{[^\\{\\}]*?\\\\fn(?P<font_name>[^\\\\{\\}]+?)[^\\{\\}]*?\\}"
+    override_block_pattern = re.compile(override_block_re_exp)
     font_name_override_tag_pattern = re.compile(font_name_override_tag_re_exp)
-    line_font_name_override_tag_pattern = re.compile(
-        line_font_name_override_tag_re_exp
-    )
 
-    for event_index in range(len(subs)):
-        if subs[event_index].is_comment:
-            continue
-        re_result = font_name_override_tag_pattern.search(
-            subs[event_index].text
-        )
-        if re_result and line_font_name_override_tag_pattern.search(
-            subs[event_index].text
-        ):
-            all_match_tuple_list = font_name_override_tag_pattern.findall(
-                subs[event_index].text
+    info_dict: dict = dict(original_style_text_set=set(), fn_tag_text_dict={})
+
+    if font_name_override_tag_pattern.search(string):
+        split_text_list: list = override_block_pattern.split(string)
+
+        last_fn: str = ""
+        for index in range(len(split_text_list)):
+            override_block_re_result = override_block_pattern.search(
+                split_text_list[index]
             )
-            for match_tuple in all_match_tuple_list:
-                used_font_name_set.add(match_tuple[0])
-        elif subs[event_index].style in all_style_name_set:
-            used_style_name_set.add(subs[event_index].style)
+            if override_block_re_result:
+                font_name_override_tag_re_result = font_name_override_tag_pattern.search(
+                    split_text_list[index]
+                )
+                if font_name_override_tag_re_result:
+                    last_fn = font_name_override_tag_re_result.groupdict()[
+                        "font_name"
+                    ]
 
-    for style_name in used_style_name_set:
-        used_font_name_set.add(subs.styles[style_name].fontname)
+            else:
+                if last_fn:
+                    if last_fn in info_dict["fn_tag_text_dict"].keys():
+                        info_dict["fn_tag_text_dict"][last_fn] |= set(
+                            split_text_list[index]
+                        )
+                    else:
+                        info_dict["fn_tag_text_dict"][last_fn] = set(
+                            split_text_list[index]
+                        )
+                else:
+                    info_dict["original_style_text_set"] |= set(
+                        split_text_list[index]
+                    )
 
-    font_info_list: list = dir_font_info(info_file_dir="data/font_info")
-    available_font_name_set: set = set()
-    for font_info in font_info_list:
-        available_font_name_set |= set(font_info["family_list"])
+    else:
+        info_dict["original_style_text_set"] = set(
+            override_block_pattern.sub("", string)
+        )
 
-    uninstalled_font_set: set = set(
-        font_name
-        for font_name in used_font_name_set
-        if font_name.strip("@") not in available_font_name_set
+    return info_dict
+
+
+def get_missing_glyph_char_set(font_filepath: str, font_index: int, text: str):
+    font_file = ttLib.TTFont(font_filepath, fontNumber=font_index)
+
+    text_set: set = set(text)
+
+    used_unicode_char_dict: dict = {}
+    for char in text_set:
+        char_utf32 = char.encode("utf-32-be")
+        unicode_num: int = struct.unpack(">L", char_utf32)[0]
+        used_unicode_char_dict[unicode_num] = char
+
+    existed_unicode_set: set = set(font_file.getBestCmap().keys())
+
+    missing_glyph_char_set: set = set()
+    for unicode, char in used_unicode_char_dict.items():
+        if unicode not in existed_unicode_set:
+            missing_glyph_char_set.add(char)
+
+    return missing_glyph_char_set
+
+
+def get_subtitle_missing_glyph_char_info(
+    subtitle_filepath: str,
+    allowable_missing_char_set: set = set(),
+    input_encoding: str = "utf-8",
+    fonts_dir: str = "",
+    info_file_dir: str = "font_info",
+    info_filename: str = "font_info.json",
+):
+
+    subtitle_file = pysubs2.load(subtitle_filepath, encoding=input_encoding)
+
+    style_text_dict: dict = {}
+    style_font_text_dict: dict = {}
+    fn_font_text_dict: dict = {}
+
+    for event in subtitle_file:
+        if event.is_comment:
+            continue
+
+        ass_string_style_font_text_dict: dict = ass_string_style_font_text(
+            event.text
+        )
+
+        if ass_string_style_font_text_dict["original_style_text_set"]:
+            if event.style in style_text_dict.keys():
+                style_text_dict[
+                    event.style
+                ] |= ass_string_style_font_text_dict["original_style_text_set"]
+            else:
+                style_text_dict[event.style] = ass_string_style_font_text_dict[
+                    "original_style_text_set"
+                ]
+
+        for font in ass_string_style_font_text_dict["fn_tag_text_dict"]:
+            if ass_string_style_font_text_dict["fn_tag_text_dict"][font]:
+                if font in fn_font_text_dict.keys():
+                    fn_font_text_dict[font] |= ass_string_style_font_text_dict[
+                        "fn_tag_text_dict"
+                    ][font]
+                else:
+                    fn_font_text_dict[font] = ass_string_style_font_text_dict[
+                        "fn_tag_text_dict"
+                    ][font]
+
+    for style in style_text_dict.keys():
+        if style in subtitle_file.styles.keys():
+            font: str = subtitle_file.styles[style].fontname
+            if font in style_font_text_dict.keys():
+                style_font_text_dict[font] |= style_text_dict[style]
+            else:
+                style_font_text_dict[font] = style_text_dict[style]
+        else:
+            raise ValueError
+    font_text_dict: dict = copy.copy(style_font_text_dict)
+
+    for fn_font, text_set in fn_font_text_dict.items():
+        if fn_font in font_text_dict.keys():
+            font_text_dict[fn_font] |= text_set
+        else:
+            font_text_dict[fn_font] = text_set
+
+    cache_font_text_dict: dict = {}
+    for font, text_set in font_text_dict.items():
+        if font.strip("@") in cache_font_text_dict.keys():
+            cache_font_text_dict[font.strip("@")] |= text_set
+        else:
+            cache_font_text_dict[font.strip("@")] = text_set
+    font_text_dict = cache_font_text_dict
+
+    for font in font_text_dict.keys():
+        text_list: list = list(font_text_dict[font])
+        text_list.sort()
+        font_text_dict[font] = text_list
+
+    font_info_list: list = dir_font_info(
+        fonts_dir=fonts_dir,
+        info_file_dir=info_file_dir,
+        info_filename=info_filename,
     )
 
-    return uninstalled_font_set
+    all_font_name_set: set = set()
+    all_lower_font_name_set: set = set()
+    for font_info in font_info_list:
+        for font_name in font_info["family_list"]:
+            lower_font_name: str = font_name.lower()
+            all_font_name_set.add(font_name)
+            all_lower_font_name_set.add(lower_font_name)
+
+    used_font_info_dict: dict = {}
+    for font_name in font_text_dict.keys():
+        if font_name.lower() not in all_lower_font_name_set:
+            raise ValueError(
+                f"{font_name} in {subtitle_filepath} does NOT exist!"
+            )
+
+        for current_font_info in font_info_list:
+            lower_family_list: list = [
+                family.lower() for family in current_font_info["family_list"]
+            ]
+            if font_name.lower() in lower_family_list:
+                used_font_info_dict[font_name] = dict(
+                    filepath=current_font_info["filepath"],
+                    index=current_font_info["index"],
+                    file_font_num=current_font_info["file_font_num"],
+                )
+                break
+
+    missing_glyph_char_info: dict = {}
+    for font, current_font_info in used_font_info_dict.items():
+
+        text: str = "".join(font_text_dict[font])
+
+        missing_glyph_char_set: set = get_missing_glyph_char_set(
+            font_filepath=current_font_info["filepath"],
+            font_index=current_font_info["index"],
+            text=text,
+        )
+
+        unallowed_missing_glyph_char_set: set = missing_glyph_char_set - allowable_missing_char_set
+
+        if unallowed_missing_glyph_char_set:
+            missing_glyph_char_info[font] = unallowed_missing_glyph_char_set
+
+    return missing_glyph_char_info
 
 
 def get_vsmod_improper_style(

@@ -12,6 +12,9 @@
             "external_chapter_info": {
                 "filepath": ""
             },
+            "hardcoded_subtitle_info": {
+                "filepath": ""
+            },
             "segmented_transcode_config_list": [],
             "output_video_dir": "",
             "output_video_name": ""
@@ -77,6 +80,10 @@
             "external_chapter_info": {
                 "chapter_dir": "",
                 "chapter_filename_reexp": ""
+            },
+            "hardcoded_subtitle_info": {
+                "hardcoded_subtitle_dir": "",
+                "hardcoded_subtitle_filename_reexp": ""
             },
             "segmented_transcode_config": {},
             "output_video_dir": "",

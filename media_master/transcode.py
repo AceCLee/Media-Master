@@ -62,8 +62,9 @@ from .util import (
     is_iso_language,
     global_constant,
     convert_codec_2_uft8bom,
-    get_uninstalled_font_set,
+    get_subtitle_missing_glyph_char_info,
     get_vsmod_improper_style,
+    is_number,
 )
 from .video import (
     GopX265VspipeVideoTranscoding,
@@ -758,6 +759,7 @@ class CompleteVideoTranscoding(object):
                         "filepath"
                     ],
                     output_dir=self._cache_dir,
+                    output_filename=self._cache_media_filename + "_chapter",
                     dst_chapter_format=dst_chapter_format,
                 )
                 self._menu_track_file = MenuTrackFile(
@@ -766,8 +768,8 @@ class CompleteVideoTranscoding(object):
             else:
                 self._menu_track_file = extract_chapter(
                     self._config.external_chapter_info["filepath"],
-                    self._cache_dir,
-                    self._cache_media_filename,
+                    output_file_dir=self._cache_dir,
+                    output_file_name=self._cache_media_filename + "_chapter",
                     chapter_format=dst_chapter_format,
                 )
                 if self._menu_track_file is None:
@@ -778,8 +780,8 @@ class CompleteVideoTranscoding(object):
         elif self._config.copy_internal_chapter_bool:
             self._menu_track_file = extract_chapter(
                 self._input_video_filepath,
-                self._cache_dir,
-                self._cache_media_filename,
+                output_file_dir=self._cache_dir,
+                output_file_name=self._cache_media_filename + "_chapter",
                 chapter_format=dst_chapter_format,
             )
             if self._menu_track_file is None:
@@ -992,6 +994,27 @@ class CompleteVideoTranscoding(object):
             ):
                 raise ValueError(f"avc does not support hdr")
 
+            hardcoded_subtitle_filepath: str = ""
+            if self._config.hardcoded_subtitle_info[
+                "filepath"
+            ] and os.path.isfile(
+                self._config.hardcoded_subtitle_info["filepath"]
+            ):
+                _, subtitle_extension = os.path.splitext(
+                    self._config.hardcoded_subtitle_info["filepath"]
+                )
+                hardcoded_subtitle_filepath = os.path.join(
+                    self._cache_dir,
+                    self._cache_media_filename
+                    + "_hardcoded_subtitle"
+                    + subtitle_extension,
+                )
+                shutil.copyfile(
+                    self._config.hardcoded_subtitle_info["filepath"],
+                    hardcoded_subtitle_filepath,
+                )
+                self._remove_filepath_set.add(hardcoded_subtitle_filepath)
+
             other_config: dict = dict(
                 frame_rate_mode=self._video_track_file.frame_rate_mode,
                 frame_rate=self._video_track_file.frame_rate,
@@ -1021,6 +1044,7 @@ class CompleteVideoTranscoding(object):
                 input_max_mastering_display_luminance=self._video_track_file.max_mastering_display_luminance,
                 input_max_content_light_level=self._video_track_file.max_content_light_level,
                 input_max_frameaverage_light_level=self._video_track_file.max_frameaverage_light_level,
+                hardcoded_subtitle_filepath=hardcoded_subtitle_filepath,
             )
 
             if self._config.frame_server == "vspipe":
@@ -1319,6 +1343,21 @@ class SeriesVideoTranscoding(object):
         if not os.path.isdir(self._output_video_dir):
             os.makedirs(self._output_video_dir)
 
+        for index in range(len(self._episode_list)):
+            episode = self._episode_list[index]
+            if not is_number(episode):
+                raise ValueError(
+                    f"episode: {episode} in episode_list "
+                    f"{self._episode_list} is not a number"
+                )
+            episode_float: float = float(episode)
+            if not episode_float.is_integer():
+                raise ValueError(
+                    f"episode: {episode} in episode_list "
+                    f"{self._episode_list} is not a integer"
+                )
+            self._episode_list[index] = int(episode)
+
     def transcode(self):
         video_info: dict = {}
         for filename in os.listdir(self._input_video_dir):
@@ -1326,15 +1365,29 @@ class SeriesVideoTranscoding(object):
                 pattern=self._input_video_filename_reexp, string=filename
             )
             if re_result:
-                episode: str = str(int(re_result.group(1)))
+                episode: str = re_result.group(1)
+
+                if not is_number(episode):
+                    continue
+                episode_float: float = float(episode)
+                if not episode_float.is_integer():
+                    continue
+
+                episode = str(int(episode))
+
+                if int(episode) not in self._episode_list:
+                    continue
+
                 if episode in video_info.keys():
                     raise RuntimeError(
                         f"repetitive episode {episode} "
                         f"in {self._input_video_dir}"
                     )
+
                 video_info[episode] = dict(
                     filepath=os.path.join(self._input_video_dir, filename)
                 )
+
         if not video_info:
             raise RuntimeError(
                 f"Can not match any one video with "
@@ -1351,12 +1404,25 @@ class SeriesVideoTranscoding(object):
                 )
                 if re_result:
                     episode: str = re_result.group(1)
+
+                    if not is_number(episode):
+                        continue
+                    episode_float: float = float(episode)
+                    if not episode_float.is_integer():
+                        continue
+
+                    episode = str(int(episode))
+
+                    if int(episode) not in self._episode_list:
+                        continue
+
                     if episode in subtitle_info.keys():
                         raise RuntimeError(
                             f"repetitive episode in "
                             f"{external_subtitle_info['subtitle_dir']}"
                         )
-                    subtitle_info[str(int(episode))] = dict(
+
+                    subtitle_info[episode] = dict(
                         filepath=os.path.join(
                             external_subtitle_info["subtitle_dir"], filename
                         ),
@@ -1401,12 +1467,25 @@ class SeriesVideoTranscoding(object):
                 )
                 if re_result:
                     episode: str = re_result.group(1)
+
+                    if not is_number(episode):
+                        continue
+                    episode_float: float = float(episode)
+                    if not episode_float.is_integer():
+                        continue
+
+                    episode = str(int(episode))
+
+                    if int(episode) not in self._episode_list:
+                        continue
+
                     if episode in audio_info.keys():
                         raise RuntimeError(
                             f"repetitive episode in"
                             f"{external_audio_info['audio_dir']}"
                         )
-                    audio_info[str(int(episode))] = dict(
+
+                    audio_info[episode] = dict(
                         filepath=os.path.join(
                             external_audio_info["audio_dir"], filename
                         ),
@@ -1454,25 +1533,89 @@ class SeriesVideoTranscoding(object):
                 )
                 if re_result:
                     episode: str = re_result.group(1)
+
+                    if not is_number(episode):
+                        continue
+                    episode_float: float = float(episode)
+                    if not episode_float.is_integer():
+                        continue
+
+                    episode = str(int(episode))
+
+                    if int(episode) not in self._episode_list:
+                        continue
+
                     if episode in chapter_info.keys():
                         raise RuntimeError(
                             f"repetitive episode in "
                             f"{self._config.external_chapter_info['chapter_dir']}"
                         )
-                    chapter_info[str(int(episode))] = dict(
+
+                    chapter_info[episode] = dict(
                         filepath=os.path.join(
                             self._config.external_chapter_info["chapter_dir"],
                             filename,
                         )
                     )
+
             if not chapter_info:
                 raise RuntimeError(
                     f"Can not match any one chapter with "
                     f"{self._config.external_chapter_info['chapter_filename_reexp']} "
                     f"in {self._config.external_chapter_info['chapter_dir']}"
                 )
+        hardcoded_subtitle_info: dict = {}
+        if (
+            self._config.hardcoded_subtitle_info["hardcoded_subtitle_dir"]
+            and self._config.hardcoded_subtitle_info[
+                "hardcoded_subtitle_filename_reexp"
+            ]
+        ):
+            for filename in os.listdir(
+                self._config.hardcoded_subtitle_info["hardcoded_subtitle_dir"]
+            ):
+                re_result = re.search(
+                    pattern=self._config.hardcoded_subtitle_info[
+                        "hardcoded_subtitle_filename_reexp"
+                    ],
+                    string=filename,
+                )
+                if re_result:
+                    episode: str = re_result.group(1)
 
-        def length_check(info_list, video_info):
+                    if not is_number(episode):
+                        continue
+                    episode_float: float = float(episode)
+                    if not episode_float.is_integer():
+                        continue
+
+                    episode = str(int(episode))
+
+                    if int(episode) not in self._episode_list:
+                        continue
+
+                    if episode in hardcoded_subtitle_info.keys():
+                        raise RuntimeError(
+                            f"repetitive episode in "
+                            f"{self._config.hardcoded_subtitle_info['hardcoded_subtitle_dir']}"
+                        )
+
+                    hardcoded_subtitle_info[episode] = dict(
+                        filepath=os.path.join(
+                            self._config.hardcoded_subtitle_info[
+                                "hardcoded_subtitle_dir"
+                            ],
+                            filename,
+                        )
+                    )
+
+            if not hardcoded_subtitle_info:
+                raise RuntimeError(
+                    f"Can not match any one hardcoded subtitle with "
+                    f"{self._config.hardcoded_subtitle_info['hardcoded_subtitle_filename_reexp']} "
+                    f"in {self._config.hardcoded_subtitle_info['hardcoded_subtitle_dir']}"
+                )
+        def info_list_length_check(info_list, video_info):
             length_list: list = []
             length_list.append(len(video_info))
             length_list += [len(info) for info in info_list]
@@ -1498,12 +1641,86 @@ class SeriesVideoTranscoding(object):
                 )
                 g_logger.log(logging.WARNING, warning_str)
                 warnings.warn(warning_str, RuntimeWarning)
+
         if self._config.external_subtitle_info_list:
-            length_check(subtitle_info_list, video_info)
+            info_list_length_check(subtitle_info_list, video_info)
 
         if self._config.external_audio_info_list:
-            length_check(audio_info_list, video_info)
+            info_list_length_check(audio_info_list, video_info)
 
+        if (
+            self._config.external_chapter_info["chapter_dir"]
+            and self._config.external_chapter_info["chapter_filename_reexp"]
+        ):
+            if len(video_info) != len(chapter_info):
+                video_filename_list: list = [
+                    os.path.basename(one_video_info["filepath"])
+                    for one_video_info in video_info.values()
+                ]
+                chapter_filename_list: list = [
+                    os.path.basename(one_chapter_info["filepath"])
+                    for one_chapter_info in chapter_info.values()
+                ]
+                warning_str: str = (
+                    f"video number: {len(video_info)} "
+                    f"!= chapter number: {len(chapter_info)} "
+                    f"video_filename_list: {video_filename_list} "
+                    f"chapter_filename_list: {chapter_filename_list}"
+                )
+                g_logger.log(logging.WARNING, warning_str)
+                warnings.warn(warning_str, RuntimeWarning)
+
+        if (
+            self._config.hardcoded_subtitle_info["hardcoded_subtitle_dir"]
+            and self._config.hardcoded_subtitle_info[
+                "hardcoded_subtitle_filename_reexp"
+            ]
+        ):
+            if len(video_info) != len(hardcoded_subtitle_info):
+                video_filename_list: list = [
+                    os.path.basename(one_video_info["filepath"])
+                    for one_video_info in video_info.values()
+                ]
+                hardcoded_subtitle_filename_list: list = [
+                    os.path.basename(one_hardcoded_subtitle_info["filepath"])
+                    for one_hardcoded_subtitle_info in hardcoded_subtitle_info.values()
+                ]
+                warning_str: str = (
+                    f"video number: {len(video_info)} "
+                    f"!= hardcoded_subtitle number: {len(hardcoded_subtitle_info)} "
+                    f"video_filename_list: {video_filename_list} "
+                    f"hardcoded_subtitle_filename_list: {hardcoded_subtitle_filename_list}"
+                )
+                raise ValueError(warning_str)
+        for index, subtitle_info in enumerate(subtitle_info_list):
+            if any(
+                str(int(episode_num)) not in subtitle_info.keys()
+                for episode_num in self._episode_list
+            ):
+                warning_str: str = (
+                    f"transcode series: "
+                    f"{self._episode_list} mismatch subtitles in "
+                    f"{self._config.external_subtitle_info_list[index]['subtitle_filename_reexp']}"
+                )
+                g_logger.log(logging.WARNING, warning_str)
+                warnings.warn(warning_str, RuntimeWarning)
+        for index, audio_info in enumerate(audio_info_list):
+            if any(
+                str(int(episode_num)) not in audio_info.keys()
+                for episode_num in self._episode_list
+            ):
+                warning_str: str = (
+                    f"transcode series: "
+                    f"{self._episode_list} mismatch audios in "
+                    f"{self._config.external_audio_info_list[index]['audio_filename_reexp']}"
+                )
+                g_logger.log(logging.WARNING, warning_str)
+                warnings.warn(warning_str, RuntimeWarning)
+        for episode in self._episode_list:
+            if str(episode) not in video_info.keys():
+                raise ValueError(
+                    f"video of episode: {episode} does NOT existed!"
+                )
         video_filename_list: list = [
             os.path.basename(one_video_info["filepath"])
             for one_video_info in video_info.values()
@@ -1524,17 +1741,45 @@ class SeriesVideoTranscoding(object):
             )
             g_logger.log(logging.DEBUG, transcode_series_subtitle_debug_str)
 
+        for index, audio_info in enumerate(audio_info_list):
+            audio_filename_list: list = [
+                os.path.basename(one_audio_info["filepath"])
+                for one_audio_info in audio_info.values()
+            ]
+            transcode_series_audio_debug_str: str = (
+                f"transcode series:" f"audios {index}:{audio_filename_list}"
+            )
+            g_logger.log(logging.DEBUG, transcode_series_audio_debug_str)
+
         if (
             self._config.external_chapter_info["chapter_dir"]
             and self._config.external_chapter_info["chapter_filename_reexp"]
         ):
-            length_list: list = []
-            length_list.append(len(video_info))
-            length_list += [
-                len(subtitle_info) for subtitle_info in subtitle_info_list
+            chapter_filename_list: list = [
+                os.path.basename(one_chapter_info["filepath"])
+                for one_chapter_info in chapter_info.values()
             ]
-            if len(video_info) != len(chapter_info):
-                raise RuntimeError(f"len(video_info) != len(chapter_info)")
+            transcode_series_chapter_debug_str: str = (
+                f"transcode series: chapters:{chapter_filename_list}"
+            )
+            g_logger.log(logging.DEBUG, transcode_series_chapter_debug_str)
+
+        if (
+            self._config.hardcoded_subtitle_info["hardcoded_subtitle_dir"]
+            and self._config.hardcoded_subtitle_info[
+                "hardcoded_subtitle_filename_reexp"
+            ]
+        ):
+            hardcoded_subtitle_filename_list: list = [
+                os.path.basename(one_hardcoded_subtitle_info["filepath"])
+                for one_hardcoded_subtitle_info in hardcoded_subtitle_info.values()
+            ]
+            transcode_series_hardcoded_subtitle_debug_str: str = (
+                f"transcode series: hardcoded_subtitles:{hardcoded_subtitle_filename_list}"
+            )
+            g_logger.log(
+                logging.DEBUG, transcode_series_hardcoded_subtitle_debug_str
+            )
 
         start_info_str: str = (
             f"transcode series: starting transcoding "
@@ -1542,40 +1787,9 @@ class SeriesVideoTranscoding(object):
         )
         print(start_info_str, file=sys.stderr)
         g_logger.log(logging.INFO, start_info_str)
-
-        for index, subtitle_info in enumerate(subtitle_info_list):
-            if any(
-                str(int(episode_num)) not in subtitle_info.keys()
-                for episode_num in self._episode_list
-            ):
-                warning_str: str = (
-                    f"transcode series: "
-                    f"{self._episode_list} mismatch subtitles in "
-                    f"{self._config.external_subtitle_info_list[index]['subtitle_filename_reexp']}"
-                )
-                g_logger.log(logging.WARNING, warning_str)
-                warnings.warn(warning_str, RuntimeWarning)
-
-        for index, audio_info in enumerate(audio_info_list):
-            if any(
-                str(int(episode_num)) not in audio_info.keys()
-                for episode_num in self._episode_list
-            ):
-                warning_str: str = (
-                    f"transcode series: "
-                    f"{self._episode_list} mismatch audios in "
-                    f"{self._config.external_audio_info_list[index]['audio_filename_reexp']}"
-                )
-                g_logger.log(logging.WARNING, warning_str)
-                warnings.warn(warning_str, RuntimeWarning)
-
-        if len(video_info) < len(self._episode_list):
-            raise ValueError(
-                f"len(video_info) < len(self._episode_list) "
-                f"{len(video_info)} < {len(self._episode_list)}"
-            )
         for episode_num in self._episode_list:
-            video_filepath: str = video_info[str(episode_num)]["filepath"]
+            episode: str = str(int(episode_num))
+            video_filepath: str = video_info[episode]["filepath"]
             output_video_filename: str = (
                 self._output_video_name_template_str.format(
                     episode=episode_num
@@ -1590,40 +1804,40 @@ class SeriesVideoTranscoding(object):
             config.pop("episode_list")
             config["external_subtitle_info_list"] = [
                 dict(
-                    filepath=subtitle_info[str(int(episode_num))]["filepath"],
-                    title=subtitle_info[str(int(episode_num))]["title"],
-                    language=subtitle_info[str(int(episode_num))]["language"],
-                    delay_ms=subtitle_info[str(int(episode_num))]["delay_ms"],
-                    track_index_list=subtitle_info[str(int(episode_num))][
+                    filepath=subtitle_info[episode]["filepath"],
+                    title=subtitle_info[episode]["title"],
+                    language=subtitle_info[episode]["language"],
+                    delay_ms=subtitle_info[episode]["delay_ms"],
+                    track_index_list=subtitle_info[episode][
                         "track_index_list"
                     ],
                 )
                 for subtitle_info in subtitle_info_list
-                if str(int(episode_num)) in subtitle_info.keys()
+                if episode in subtitle_info.keys()
             ]
             config["external_audio_info_list"] = [
                 dict(
-                    filepath=audio_info[str(int(episode_num))]["filepath"],
-                    title=audio_info[str(int(episode_num))]["title"],
-                    language=audio_info[str(int(episode_num))]["language"],
-                    delay_ms=audio_info[str(int(episode_num))]["delay_ms"],
-                    track_index_list=audio_info[str(int(episode_num))][
-                        "track_index_list"
-                    ],
+                    filepath=audio_info[episode]["filepath"],
+                    title=audio_info[episode]["title"],
+                    language=audio_info[episode]["language"],
+                    delay_ms=audio_info[episode]["delay_ms"],
+                    track_index_list=audio_info[episode]["track_index_list"],
                 )
                 for audio_info in audio_info_list
-                if str(int(episode_num)) in audio_info.keys()
+                if episode in audio_info.keys()
             ]
             config["external_chapter_info"] = (
-                chapter_info[str(int(episode_num))]
-                if chapter_info
+                chapter_info[episode] if chapter_info else dict(filepath="")
+            )
+            config["hardcoded_subtitle_info"] = (
+                hardcoded_subtitle_info[episode]
+                if hardcoded_subtitle_info
                 else dict(filepath="")
             )
 
             config["segmented_transcode_config_list"] = (
-                config["segmented_transcode_config"][str(int(episode_num))]
-                if str(int(episode_num))
-                in config["segmented_transcode_config"].keys()
+                config["segmented_transcode_config"][episode]
+                if episode in config["segmented_transcode_config"].keys()
                 else []
             )
 
@@ -1665,7 +1879,31 @@ def is_available_language(language: str) -> bool:
         return is_iso_language(language)
 
 
-def config_pre_check(one_mission_config: dict, all_output_filepath_set: set):
+def hardcoded_subtitle_check(
+    subtitle_filepath: str, subtitle_allowable_missing_glyph_char_set: set
+):
+    subtitle_missing_glyph_char_info: set = get_subtitle_missing_glyph_char_info(
+        subtitle_filepath,
+        allowable_missing_char_set=subtitle_allowable_missing_glyph_char_set,
+    )
+    if subtitle_missing_glyph_char_info:
+        raise ValueError(
+            f"subtitle_missing_glyph_char_info: "
+            f"{subtitle_missing_glyph_char_info} in {subtitle_filepath}"
+        )
+
+    improper_style_set: set = get_vsmod_improper_style(subtitle_filepath)
+    if improper_style_set:
+        raise ValueError(
+            f"{improper_style_set} in {subtitle_filepath} is improper style(s)."
+        )
+
+
+def config_pre_check(
+    one_mission_config: dict,
+    all_output_filepath_set: set,
+    global_config_dict: dict,
+):
     config: dict = one_mission_config
     if config["type"] == "single":
         if not os.path.isfile(config["input_video_filepath"]) and all(
@@ -1745,6 +1983,29 @@ def config_pre_check(one_mission_config: dict, all_output_filepath_set: set):
                     f"{config['external_chapter_info']['filepath']} "
                     f"is not a file."
                 )
+
+        if config["hardcoded_subtitle_info"]["filepath"]:
+            if not os.path.isfile(
+                config["hardcoded_subtitle_info"]["filepath"]
+            ):
+                raise ValueError(
+                    f"filepath of hardcoded subtitle: "
+                    f"{config['hardcoded_subtitle_info']['filepath']} "
+                    f"is not a file."
+                )
+
+            convert_codec_2_uft8bom(
+                config["hardcoded_subtitle_info"]["filepath"]
+            )
+
+            hardcoded_subtitle_check(
+                config["hardcoded_subtitle_info"]["filepath"],
+                subtitle_allowable_missing_glyph_char_set=set(
+                    global_config_dict[
+                        "subtitle_allowable_missing_glyph_char_list"
+                    ]
+                ),
+            )
 
     elif config["type"] == "series":
         if not os.path.isdir(config["input_video_dir"]):
@@ -1886,6 +2147,61 @@ def config_pre_check(one_mission_config: dict, all_output_filepath_set: set):
                     f"can not match filename in "
                     f"{config['external_chapter_info']['chapter_dir']}"
                 )
+
+        if config["hardcoded_subtitle_info"]["hardcoded_subtitle_dir"]:
+            if not os.path.isdir(
+                config["hardcoded_subtitle_info"]["hardcoded_subtitle_dir"]
+            ):
+                raise ValueError(
+                    f"hardcoded_subtitle dir: "
+                    f"{config['hardcoded_subtitle_info']['hardcoded_subtitle_dir']} "
+                    f"is not a dir."
+                )
+
+            if not any(
+                re.search(
+                    config["hardcoded_subtitle_info"][
+                        "hardcoded_subtitle_filename_reexp"
+                    ],
+                    filename,
+                )
+                for filename in os.listdir(
+                    config["hardcoded_subtitle_info"]["hardcoded_subtitle_dir"]
+                )
+            ):
+                raise ValueError(
+                    f"hardcoded_subtitle_filename_reexp: "
+                    f"{config['hardcoded_subtitle_info']['hardcoded_subtitle_filename_reexp']} "
+                    f"can not match filename in "
+                    f"{config['hardcoded_subtitle_info']['hardcoded_subtitle_dir']}"
+                )
+
+            for filename in os.listdir(
+                config["hardcoded_subtitle_info"]["hardcoded_subtitle_dir"]
+            ):
+                if re.search(
+                    config["hardcoded_subtitle_info"][
+                        "hardcoded_subtitle_filename_reexp"
+                    ],
+                    filename,
+                ):
+                    hardcoded_subtitle_filepath: str = os.path.join(
+                        config["hardcoded_subtitle_info"][
+                            "hardcoded_subtitle_dir"
+                        ],
+                        filename,
+                    )
+                    convert_codec_2_uft8bom(hardcoded_subtitle_filepath)
+
+                    hardcoded_subtitle_check(
+                        hardcoded_subtitle_filepath,
+                        subtitle_allowable_missing_glyph_char_set=set(
+                            global_config_dict[
+                                "subtitle_allowable_missing_glyph_char_list"
+                            ]
+                        ),
+                    )
+
     else:
         raise ValueError(f"unkonwn type: {config['type']}")
 
@@ -1935,41 +2251,6 @@ def config_pre_check(one_mission_config: dict, all_output_filepath_set: set):
                 f"{config['frame_server_template_filepath']} "
                 f"is not a file."
             )
-
-    if "subtitle_filepath" in config["frame_server_template_config"].keys():
-        if config["frame_server_template_config"]["subtitle_filepath"]:
-            if not os.path.isfile(
-                config["frame_server_template_config"]["subtitle_filepath"]
-            ):
-                raise ValueError(
-                    f"subtitle_filepath in frame_server_template_config: "
-                    f"{config['frame_server_template_config']['subtitle_filepath']} "
-                    f"is not a file."
-                )
-
-            convert_codec_2_uft8bom(
-                config["frame_server_template_config"]["subtitle_filepath"]
-            )
-
-            uninstalled_font_set: set = get_uninstalled_font_set(
-                config["frame_server_template_config"]["subtitle_filepath"]
-            )
-            if uninstalled_font_set:
-                raise ValueError(
-                    f"{uninstalled_font_set} in "
-                    f"{config['frame_server_template_config']['subtitle_filepath']} "
-                    f"do not exist."
-                )
-
-            improper_style_set: set = get_vsmod_improper_style(
-                config["frame_server_template_config"]["subtitle_filepath"]
-            )
-            if improper_style_set:
-                raise ValueError(
-                    f"{improper_style_set} in "
-                    f"{config['frame_server_template_config']['subtitle_filepath']} "
-                    f"is improper style(s)."
-                )
 
     available_video_transcoding_method_set: set = constant.available_video_transcoding_method_set
     if (
@@ -2117,20 +2398,10 @@ def get_output_filepath_set(one_mission_config: dict):
 
 
 def transcode_all_missions(
-    config_json_filepath: str, param_template_json_filepath: str
+    config_json_filepath: str,
+    param_template_json_filepath: str,
+    global_config_json_filepath: str,
 ):
-    if not isinstance(config_json_filepath, str):
-        raise TypeError(
-            f"type of config_json_filepath must be str "
-            f"instead of {type(config_json_filepath)}"
-        )
-
-    if not isinstance(param_template_json_filepath, str):
-        raise TypeError(
-            f"type of param_template_json_filepath must be str "
-            f"instead of {type(param_template_json_filepath)}"
-        )
-
     if not os.path.isfile(config_json_filepath):
         raise FileNotFoundError(
             f"input json file cannot be found with {config_json_filepath}"
@@ -2142,8 +2413,16 @@ def transcode_all_missions(
             f"{param_template_json_filepath}"
         )
 
+    if not os.path.isfile(global_config_json_filepath):
+        raise FileNotFoundError(
+            f"input json file cannot be found with "
+            f"{global_config_json_filepath}"
+        )
+
     config_dict: dict = load_config(config_json_filepath)
     param_template_dict: dict = load_config(param_template_json_filepath)
+    global_config_dict: dict = load_config(global_config_json_filepath)
+
     param_template_key_set: set = set(param_template_dict.keys())
     basic_config_dict: dict = config_dict["basic_config"]
 
@@ -2182,7 +2461,9 @@ def transcode_all_missions(
         )
 
         config_pre_check(
-            mission_config, all_output_filepath_set=all_output_filepath_set
+            mission_config,
+            all_output_filepath_set=all_output_filepath_set,
+            global_config_dict=global_config_dict,
         )
 
         episode_list_re_exp: str = "(\\d+)~(\\d+)"

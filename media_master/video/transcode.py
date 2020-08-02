@@ -648,6 +648,7 @@ class VspipeVideoTranscoding(FrameServerVideoTranscoding):
         "{{first_frame_index}}",
         "{{last_frame_index}}",
         "{{timecode_filepath}}",
+        "{{hardcoded_subtitle_filepath}}",
     }
     vspipe_exe_filename: str = "vspipe.exe"
 
@@ -790,6 +791,9 @@ class VspipeVideoTranscoding(FrameServerVideoTranscoding):
             "vfr_bool": self._other_config["output_frame_rate_mode"] == "vfr",
             "timecode_filepath": self._other_config[
                 "video_timecode_filepath"
+            ].replace("\\", "/"),
+            "hardcoded_subtitle_filepath": self._other_config[
+                "hardcoded_subtitle_filepath"
             ].replace("\\", "/"),
         }
 

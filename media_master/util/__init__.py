@@ -34,4 +34,8 @@ from .template import (
 )
 from .timecode import mkv_timecode_2_standard_timecode
 from .charset import convert_codec_2_uft8bom
-from .subtitle import get_uninstalled_font_set, get_vsmod_improper_style
+from .subtitle import (
+    get_subtitle_missing_glyph_char_info,
+    get_vsmod_improper_style,
+)
+from .number import is_number

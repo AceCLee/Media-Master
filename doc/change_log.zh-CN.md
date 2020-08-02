@@ -330,3 +330,10 @@
 * 修复压制视频之前未检查编码器环境变量的问题
 * 在调用子进程时，为了避免出现UnicodeDecodeError，调用子进程加入errors参数以规避该错误
 * 将universal_config改为general_config
+
+### Version 0.0.19.4
+
+* 在配置文件中加入硬字幕读取功能，并作为模板{{hardcoded_subtitle_filepath}}给出
+* 增加了硬字幕的字型检查功能，可允许的缺失字型由"global_config.json"中的"subtitle_allowable_missing_glyph_char_list"给出
+* 完善了series转码的预检查逻辑
+* 优化了缓存文件的文件名

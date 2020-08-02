@@ -37,7 +37,10 @@ def get_chapter_format_info_dict():
 
 
 def convert_chapter_format(
-    src_chapter_filepath: str, output_dir: str, dst_chapter_format: str
+    src_chapter_filepath: str,
+    output_dir: str,
+    output_filename: str,
+    dst_chapter_format: str,
 ) -> str:
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
@@ -57,7 +60,7 @@ def convert_chapter_format(
 
     src_filename, src_extension = os.path.splitext(src_full_filename)
 
-    dst_full_filename: str = src_filename + format_info["ext"]
+    dst_full_filename: str = output_filename + format_info["ext"]
 
     dst_filepath: str = os.path.join(output_dir, dst_full_filename)
 

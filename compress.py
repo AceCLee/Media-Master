@@ -28,5 +28,12 @@ if __name__ == "__main__":
     param_template_json_filepath: str = os.path.join(
         os.getcwd(), "data/config/param_template.json"
     )
+    global_config_json_filepath: str = os.path.join(
+        os.getcwd(), "data/config/global_config.json"
+    )
 
-    transcode_all_missions(config_json_filepath, param_template_json_filepath)
+    transcode_all_missions(
+        config_json_filepath,
+        param_template_json_filepath,
+        global_config_json_filepath,
+    )
