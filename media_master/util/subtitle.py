@@ -175,7 +175,7 @@ def ass_string_style_font_text(string):
                 if font_name_override_tag_re_result:
                     last_fn = font_name_override_tag_re_result.groupdict()[
                         "font_name"
-                    ]
+                    ].strip(" ")
 
             else:
                 if last_fn:
@@ -211,14 +211,18 @@ def get_missing_glyph_char_set(font_filepath: str, font_index: int, text: str):
         unicode_num: int = struct.unpack(">L", char_utf32)[0]
         used_unicode_char_dict[unicode_num] = char
 
-    existed_unicode_set: set = set(font_file.getBestCmap().keys())
+    cmap_dict: dict = font_file.getBestCmap()
+    if cmap_dict:
+        existed_unicode_set: set = set(cmap_dict.keys())
 
-    missing_glyph_char_set: set = set()
-    for unicode, char in used_unicode_char_dict.items():
-        if unicode not in existed_unicode_set:
-            missing_glyph_char_set.add(char)
+        missing_glyph_char_set: set = set()
+        for unicode, char in used_unicode_char_dict.items():
+            if unicode not in existed_unicode_set:
+                missing_glyph_char_set.add(char)
 
-    return missing_glyph_char_set
+        return missing_glyph_char_set
+    else:
+        raise ValueError(f"CMAP of {font_filepath} is {cmap_dict}")
 
 
 def get_subtitle_missing_glyph_char_info(
@@ -375,5 +379,4 @@ def get_vsmod_improper_style(
         improper_style_set.add(improper_style_name)
 
     return improper_style_set
-
 
