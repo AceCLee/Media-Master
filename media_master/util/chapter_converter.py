@@ -1,4 +1,8 @@
-# https://github.com/fireattack/chapter_converter
+"""
+
+https://github.com/fireattack/chapter_converter
+
+"""
 
 from subprocess import run
 import argparse
@@ -44,13 +48,24 @@ def load_file_content(filename):
 
 
 def main():
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("filename", nargs="?")
+    parser.add_argument("filename", nargs="?", help="input filename")
     parser.add_argument(
         "-f",
         "--format",
         choices=["simple", "pot", "ogm", "tab", "xml"],
         help="output format (default: pot)",
+    )
+    parser.add_argument(
+        "--mp4-charset",
+        help="input chapter charset for mp4 file, since it can't be auto detected (default: utf-8)",
+        default="utf-8",
+    )
+    parser.add_argument(
+        "--charset",
+        help="output file charset (default: utf-8-sig)",
+        default="utf-8-sig",
     )
     parser.add_argument(
         "-o",
@@ -72,7 +87,18 @@ def main():
             remove("temp.mks")
             remove("temp.ogm.txt")
         elif args.filename.lower().split(".")[-1] in ["mp4", "mkv"]:
-            run(["mkvmerge", "-o", "temp.mks", "-A", "-D", args.filename])
+            run(
+                [
+                    "mkvmerge",
+                    "-o",
+                    "temp.mks",
+                    "-A",
+                    "-D",
+                    "--chapter-charset",
+                    args.mp4_charset,
+                    args.filename,
+                ]
+            )
             run(["mkvextract", "temp.mks", "chapters", "-s", "temp.ogm.txt"])
             lines = load_file_content("temp.ogm.txt")
             remove("temp.mks")
@@ -87,14 +113,14 @@ def main():
             lines = f.splitlines()
         else:
             print("No valid input data in clipboard!")
-            raise RuntimeError("No valid input data in clipboard!")
+            return 0
     else:
         print("Input file missing or invalid!")
-        raise RuntimeError("Input file missing or invalid!")
+        return 0
     lines = list(filter(lambda x: not re.match(r"^\s*$", x), lines))
     input_format = ""
-    SIMPLE_RE = r"(.+?), *(.+)"
-    TAB_RE = r"(.+?)\t(.+)"
+    SIMPLE_RE = r"([0-9:.]+?), *(.+)"
+    TAB_RE = r"([0-9:.].+?)\t(.+)"
     if re.match(SIMPLE_RE, lines[0]):
         input_format = "simple"
     elif re.match(TAB_RE, lines[0]):
@@ -105,8 +131,7 @@ def main():
         input_format = "pot"
     if not input_format:
         print("Can't guess file format!")
-        raise RuntimeError("Can't guess file format!")
-
+        return 0
     chapters = []
     if input_format == "simple":
         for line in lines:
@@ -132,10 +157,21 @@ def main():
                 timestamp = ms_to_timestamp(m.group(1))
                 chapters.append((timestamp, m.group(2)))
     if not args.format:
+        args.format = "pot"
         if args.clipboard and input_format != "tab":
-            args.format = "tab"
-        else:
-            args.format = "pot"
+            args.format = (
+                "tab"
+            )
+        if (
+            args.output
+        ):
+            ext = splitext(args.output)[-1]
+            if ext.lower() == ".pbf":
+                args.format = "pot"
+            elif ext.lower() == ".xml":
+                args.format = "xml"
+            elif ext.lower() == ".txt":
+                args.format = "ogm"
     if args.clipboard and not args.output:
         pass
     else:
@@ -157,7 +193,6 @@ def main():
         while exists(new_filename):
             new_filename = f"{stem} ({i}){ext}"
             i += 1
-
     output = ""
     if args.format == "tab":
         for time, title in chapters:
@@ -182,14 +217,16 @@ def main():
         print(output)
         set_clipboard_data(output.replace("\n", "\r\n"))
     elif args.format == "xml":
-        with open("temp.ogm.txt", "w", encoding="utf-8-sig") as f:
+        with open("temp.ogm.txt", "w", encoding=args.charset) as f:
             f.write(output)
         run(["mkvmerge", "-o", "temp.mks", "--chapters", "temp.ogm.txt"])
         run(["mkvextract", "temp.mks", "chapters", new_filename])
         remove("temp.mks")
         remove("temp.ogm.txt")
     else:
-        with open(new_filename, "w", encoding="utf-8-sig") as f:
+        with open(new_filename, "w", encoding=args.charset) as f:
             f.write(output)
 
 
+if __name__ == "__main__":
+    main()

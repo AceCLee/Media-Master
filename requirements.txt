@@ -5,3 +5,4 @@ iso-639
 chardet
 pysubs2
 fontTools
+pywin32

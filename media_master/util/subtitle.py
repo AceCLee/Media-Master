@@ -22,11 +22,26 @@ import re
 import chardet
 import pysubs2
 from fontTools import ttLib
-from fontTools.ttLib.sfnt import readTTCHeader
+from fontTools.ttLib.sfnt import (
+    readTTCHeader,
+    sfntDirectorySize,
+    woffDirectorySize,
+    sfntDirectoryFormat,
+    woffDirectoryFormat,
+)
+from fontTools.misc import sstruct
+
+from fontTools.misc.py23 import Tag
 import copy
 import struct
 
 from .config import load_config, save_config
+import logging
+import warnings
+
+g_logger = logging.getLogger(__name__)
+g_logger.propagate = True
+g_logger.setLevel(logging.DEBUG)
 
 
 def ass_check(subtitle_dir: str, encoding="utf-8-sig"):
@@ -109,9 +124,75 @@ def dir_font_info(
         font_info_dict = dict(font_info_list=[])
         for font_path in all_font_filepath_list:
             font_num: int = 1
+
             with open(font_path, "rb") as file:
-                if file.read(4) == b"ttcf":
-                    font_num = readTTCHeader(file).numFonts
+                font_sfnt_version: str = ""
+
+                file.seek(0)
+                font_sfnt_version = file.read(4)
+                file.seek(0)
+
+                if font_sfnt_version == b"ttcf":
+                    header = readTTCHeader(file)
+                    font_num = header.numFonts
+
+                    file.seek(header.offsetTable[0])
+                    data = file.read(sfntDirectorySize)
+                    if len(data) != sfntDirectorySize:
+                        font_error_warning_str: str = (
+                            f"{font_path} is Not a Font Collection "
+                            "(not enough data), skip."
+                        )
+                        g_logger.log(logging.WARNING, font_error_warning_str)
+                        warnings.warn(font_error_warning_str, RuntimeWarning)
+                        continue
+                    data_dict: dict = sstruct.unpack(sfntDirectoryFormat, data)
+                    font_sfnt_version = data_dict["sfntVersion"]
+                elif font_sfnt_version == b"wOFF":
+                    font_num = 1
+
+                    data = file.read(woffDirectorySize)
+                    if len(data) != woffDirectorySize:
+                        font_error_warning_str: str = (
+                            f"{font_path} is Not a WOFF font "
+                            "(not enough data), skip."
+                        )
+                        g_logger.log(logging.WARNING, font_error_warning_str)
+                        warnings.warn(font_error_warning_str, RuntimeWarning)
+                        continue
+                    data_dict: dict = sstruct.unpack(woffDirectoryFormat, data)
+                    font_sfnt_version = data_dict["sfntVersion"]
+                else:
+                    font_num = 1
+
+                    data = file.read(sfntDirectorySize)
+                    if len(data) != sfntDirectorySize:
+                        font_error_warning_str: str = (
+                            f"{font_path} is Not a TrueType or OpenType font "
+                            "(not enough data), skip."
+                        )
+                        g_logger.log(logging.WARNING, font_error_warning_str)
+                        warnings.warn(font_error_warning_str, RuntimeWarning)
+                        continue
+                    data_dict: dict = sstruct.unpack(sfntDirectoryFormat, data)
+                    font_sfnt_version = data_dict["sfntVersion"]
+
+                font_sfnt_version_tag = Tag(font_sfnt_version)
+
+                if font_sfnt_version_tag not in (
+                    "\x00\x01\x00\x00",
+                    "OTTO",
+                    "true",
+                ):
+                    print(font_sfnt_version)
+                    print(font_sfnt_version_tag)
+                    font_error_warning_str: str = (
+                        f"{font_path} is Not a TrueType or OpenType font "
+                        "(bad sfntVersion), skip."
+                    )
+                    g_logger.log(logging.WARNING, font_error_warning_str)
+                    warnings.warn(font_error_warning_str, RuntimeWarning)
+                    continue
 
             for font_num_index in range(font_num):
                 tt_font = ttLib.TTFont(font_path, fontNumber=font_num_index)
@@ -153,7 +234,7 @@ def dir_font_info(
 
 def ass_string_style_font_text(string):
     override_block_re_exp: str = "(\\{[^\\{\\}]+?\\})"
-    font_name_override_tag_re_exp: str = "\\\\fn(?P<font_name>[^\\\\{\\}]*?)(\\\\|\})"
+    font_name_override_tag_re_exp: str = "\\\\fn(?P<font_name>[^\\\\{\\}]*?)(\\\\|\\})"
 
     override_block_pattern = re.compile(override_block_re_exp)
     font_name_override_tag_pattern = re.compile(font_name_override_tag_re_exp)
@@ -379,4 +460,5 @@ def get_vsmod_improper_style(
         improper_style_set.add(improper_style_name)
 
     return improper_style_set
+
 

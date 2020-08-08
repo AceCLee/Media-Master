@@ -337,3 +337,9 @@
 * 增加了硬字幕的字型检查功能，可允许的缺失字型由"global_config.json"中的"subtitle_allowable_missing_glyph_char_list"给出
 * 完善了series转码的预检查逻辑
 * 优化了缓存文件的文件名
+
+### Version 0.0.19.5
+
+* 修复了系统字体文件夹遇到错误字体报错的问题
+* 修复了无法转换章节的问题
+* 修复了requirements.txt中依赖库缺失的问题
