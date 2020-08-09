@@ -40,7 +40,7 @@ class Track(object):
 
 
 class RepeatableTrack(Track):
-
+    
     def __init__(
         self,
         track_index: int,
@@ -107,11 +107,6 @@ class RepeatableTrack(Track):
         if not isinstance(delay_ms, int):
             raise TypeError(
                 f"type of delay_ms must be int instead of {type(delay_ms)}"
-            )
-        if delay_ms < 0:
-            raise RangeError(
-                message=f"value of delay_ms must in (0,inf)",
-                valid_range=f"(0,inf)",
             )
         self.delay_ms = delay_ms
 
@@ -199,7 +194,7 @@ class MenuTrack(Track):
 
 
 class VideoTrack(RepeatableTrack):
-
+    
     def __init__(
         self,
         track_index: int,
@@ -437,7 +432,7 @@ class VideoTrack(RepeatableTrack):
 
 
 class AudioTrack(RepeatableTrack):
-
+    
     def __init__(
         self,
         track_index: int,
@@ -480,7 +475,7 @@ class AudioTrack(RepeatableTrack):
 
 
 class TextTrack(RepeatableTrack):
-
+    
     def __init__(
         self,
         track_index: int,
@@ -510,7 +505,7 @@ class TextTrack(RepeatableTrack):
 
 
 class IntermediateFile(object):
-
+    
     def __init__(self, filepath: str):
         if not isinstance(filepath, str):
             raise TypeError(
