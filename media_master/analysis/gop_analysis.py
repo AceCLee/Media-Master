@@ -37,14 +37,11 @@ def video_frame_info(
 ) -> str:
     if not isinstance(input_filepath, str):
         raise TypeError(
-            f"type of input_filepath must be str "
-            f"instead of {type(input_filepath)}"
+            f"type of input_filepath must be str " f"instead of {type(input_filepath)}"
         )
 
     if not isinstance(thread_num, int):
-        raise TypeError(
-            f"type of thread_num must be int instead of {type(thread_num)}"
-        )
+        raise TypeError(f"type of thread_num must be int instead of {type(thread_num)}")
 
     if not isinstance(ffprobe_exe_file_dir, str):
         raise TypeError(
@@ -65,33 +62,26 @@ def video_frame_info(
         all_filename_list: list = os.listdir(ffprobe_exe_file_dir)
         if ffprobe_exe_filename not in all_filename_list:
             raise FileNotFoundError(
-                f"{ffprobe_exe_filename} cannot be found in "
-                f"{ffprobe_exe_file_dir}"
+                f"{ffprobe_exe_filename} cannot be found in " f"{ffprobe_exe_file_dir}"
             )
     else:
         if not check_file_environ_path({ffprobe_exe_filename}):
             raise FileNotFoundError(
-                f"{ffprobe_exe_filename} cannot be found in "
-                f"environment path"
+                f"{ffprobe_exe_filename} cannot be found in " f"environment path"
             )
 
-    ffprobe_exe_filepath: str = os.path.join(
-        ffprobe_exe_file_dir, ffprobe_exe_filename
-    )
+    ffprobe_exe_filepath: str = os.path.join(ffprobe_exe_file_dir, ffprobe_exe_filename)
     input_file_dir: str = os.path.dirname(input_filepath)
     input_file_basename: str = os.path.basename(input_filepath)
     input_file_suffix: str = f".{input_file_basename.split('.')[-1]}"
     input_file_name: str = input_file_basename.replace(input_file_suffix, "")
     csv_suffix: str = ".csv"
     output_csv_filename: str = f"{input_file_name}{csv_suffix}"
-    output_csv_filepath: str = os.path.join(
-        input_file_dir, output_csv_filename
-    )
+    output_csv_filepath: str = os.path.join(input_file_dir, output_csv_filename)
     output_filepath: str = output_csv_filepath
     if os.path.isfile(output_filepath):
         skip_info_str: str = (
-            f"video_frame_info: {output_filepath} "
-            "already existed, skip analysis."
+            f"video_frame_info: {output_filepath} " "already existed, skip analysis."
         )
 
         print(skip_info_str, file=sys.stderr)
@@ -132,15 +122,14 @@ def video_frame_info(
     g_logger.log(logging.DEBUG, ffmpeg_param_debug_str)
 
     start_info_str: str = (
-        f"video_frame_info: start to analyse "
-        f"{input_filepath} to {output_filepath}"
+        f"video_frame_info: start to analyse " f"{input_filepath} to {output_filepath}"
     )
 
     print(start_info_str, file=sys.stderr)
     g_logger.log(logging.INFO, start_info_str)
     process = subprocess.Popen(args_list, shell=True)
 
-    return_code = process.wait()
+    return_code = process.communicate()
 
     if return_code == 0:
         end_info_str: str = (
@@ -219,9 +208,7 @@ def save_high_bitrate_gop_info(
     frame_df = original_frame_df[["key_frame", "pkt_size"]]
     ave_size: float = frame_df["pkt_size"].mean()
     frame_df["gop_ave_size"] = np.zeros((frame_df.shape[0], 1))
-    frame_df["next_i_frame_index"] = np.zeros(
-        (frame_df.shape[0], 1), dtype=int
-    )
+    frame_df["next_i_frame_index"] = np.zeros((frame_df.shape[0], 1), dtype=int)
     key_frame_index_array: np.ndarray = np.array(
         frame_df[frame_df["key_frame"] == 1].index
     )
@@ -237,9 +224,7 @@ def save_high_bitrate_gop_info(
         )
         if next_key_frame_index_index >= len(key_frame_index_array):
             break
-        key_frame_index_list.append(
-            key_frame_index_array[next_key_frame_index_index]
-        )
+        key_frame_index_list.append(key_frame_index_array[next_key_frame_index_index])
         key_frame_index_array_index = next_key_frame_index_index
     key_frame_index_array = np.array(key_frame_index_list, dtype=int)
 
@@ -272,9 +257,7 @@ def save_high_bitrate_gop_info(
                 & (frame_df["gop_ave_size"] < multiple_max * ave_size)
             ]
         else:
-            target_df = frame_df[
-                frame_df["gop_ave_size"] >= multiple_min * ave_size
-            ]
+            target_df = frame_df[frame_df["gop_ave_size"] >= multiple_min * ave_size]
 
         target_list: list = []
         for index, row in target_df.iterrows():
@@ -295,9 +278,9 @@ def save_high_bitrate_gop_info(
                 == target_list[index][config["first_frame_index_key"]]
             ):
                 gop_dict: dict = {}
-                gop_dict[config["first_frame_index_key"]] = merge_target_list[
-                    -1
-                ][config["first_frame_index_key"]]
+                gop_dict[config["first_frame_index_key"]] = merge_target_list[-1][
+                    config["first_frame_index_key"]
+                ]
                 gop_dict[config["last_frame_index_key"]] = target_list[index][
                     config["last_frame_index_key"]
                 ]
@@ -306,11 +289,9 @@ def save_high_bitrate_gop_info(
                 merge_target_list.append(target_list[index])
 
         target_dict: dict = {}
-        target_dict[
-            config["video_transcoding_cmd_param_template_key"]
-        ] = config["multiple_config"][key][
-            "video_transcoding_cmd_param_template_value"
-        ]
+        target_dict[config["video_transcoding_cmd_param_template_key"]] = config[
+            "multiple_config"
+        ][key]["video_transcoding_cmd_param_template_value"]
         target_dict[config["frame_server_template_filepath_key"]] = config[
             "multiple_config"
         ][key]["frame_server_template_filepath_value"]
@@ -337,16 +318,12 @@ def save_series_high_bitrate_gop_info(
     json_suffix: str = ".json"
     all_gop_info_dict: dict = {}
     for filename in os.listdir(input_video_dir):
-        re_result = re.search(
-            pattern=input_video_filename_reexp, string=filename
-        )
+        re_result = re.search(pattern=input_video_filename_reexp, string=filename)
         if re_result:
             input_filepath: str = os.path.join(input_video_dir, filename)
             input_file_basename: str = os.path.basename(input_filepath)
             input_file_suffix: str = f".{input_file_basename.split('.')[-1]}"
-            input_file_name: str = input_file_basename.replace(
-                input_file_suffix, ""
-            )
+            input_file_name: str = input_file_basename.replace(input_file_suffix, "")
             json_filename = f"{input_file_name}_gop_info{json_suffix}"
             json_filepath: str = os.path.join(output_json_dir, json_filename)
             print(input_filepath, json_filepath)

@@ -6,3 +6,5 @@ chardet
 pysubs2
 fontTools
 pywin32
+pyyaml
+pyhocon

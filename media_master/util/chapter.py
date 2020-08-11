@@ -64,6 +64,9 @@ def convert_chapter_format(
 
     dst_filepath: str = os.path.join(output_dir, dst_full_filename)
 
+    if os.path.isfile(dst_filepath):
+        os.remove(dst_filepath)
+
     python_exe = "python.exe"
 
     cmd_param_list: list = [
@@ -77,8 +80,7 @@ def convert_chapter_format(
     ]
 
     param_debug_str: str = (
-        f"convert_chapter_format: param: "
-        f"{subprocess.list2cmdline(cmd_param_list)}"
+        f"convert_chapter_format: param: {subprocess.list2cmdline(cmd_param_list)}"
     )
     g_logger.log(logging.DEBUG, param_debug_str)
     print(param_debug_str, file=sys.stderr)

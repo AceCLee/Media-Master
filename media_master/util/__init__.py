@@ -25,7 +25,14 @@ from .meta_data import (
 from .multiplex import multiplex_mkv, multiplex_mp4, remultiplex_ffmpeg
 from .name_hash import hash_name
 from .sort import resort
-from .string_util import get_printable, is_ascii, is_printable
+from .string_util import (
+    get_printable,
+    is_ascii,
+    is_printable,
+    get_unique_printable_filename,
+    is_filename_with_valid_mark,
+    get_filename_with_valid_mark,
+)
 from .template import (
     generate_vpy_file,
     is_template,

@@ -39,6 +39,9 @@ from ..util import (
     replace_config_template_dict,
     replace_param_template_list,
     save_config,
+    get_unique_printable_filename,
+    is_filename_with_valid_mark,
+    get_filename_with_valid_mark,
 )
 
 g_logger = logging.getLogger(__name__)
@@ -106,8 +109,7 @@ class VideoTranscoding(object):
 
         if not isinstance(other_config, dict):
             raise TypeError(
-                f"type of other_config must be dict "
-                f"instead of {type(other_config)}"
+                f"type of other_config must be dict " f"instead of {type(other_config)}"
             )
         other_config_key_set: set = set(other_config.keys())
         for key in self.necessary_other_config_key_set:
@@ -119,9 +121,7 @@ class VideoTranscoding(object):
         if not os.path.isdir(self._output_video_dir):
             os.makedirs(self._output_video_dir)
 
-        self._input_full_range_bool: bool = self._other_config[
-            "input_full_range_bool"
-        ]
+        self._input_full_range_bool: bool = self._other_config["input_full_range_bool"]
         self._output_full_range_bool: bool = self._other_config[
             "output_full_range_bool"
         ]
@@ -130,13 +130,9 @@ class VideoTranscoding(object):
         self, width: int, height: int, output_bit_depth: int
     ) -> list:
         if not isinstance(width, int):
-            raise TypeError(
-                f"type of width must be int instead of {type(width)}"
-            )
+            raise TypeError(f"type of width must be int instead of {type(width)}")
         if not isinstance(height, int):
-            raise TypeError(
-                f"type of height must be int instead of {type(height)}"
-            )
+            raise TypeError(f"type of height must be int instead of {type(height)}")
         if not isinstance(output_bit_depth, int):
             raise TypeError(
                 f"type of output_bit_depth must be int instead of "
@@ -145,13 +141,11 @@ class VideoTranscoding(object):
 
         if width <= 0:
             raise RangeError(
-                message=f"value of width must in (0,inf)",
-                valid_range=f"(0,inf)",
+                message=f"value of width must in (0,inf)", valid_range=f"(0,inf)",
             )
         if height <= 0:
             raise RangeError(
-                message=f"value of height must in (0,inf)",
-                valid_range=f"(0,inf)",
+                message=f"value of height must in (0,inf)", valid_range=f"(0,inf)",
             )
 
         colorspace_specification_dict: dict = get_colorspace_specification(
@@ -159,9 +153,7 @@ class VideoTranscoding(object):
         )
 
         colormatrix_param: str = "--colormatrix"
-        colormatrix_param_value: str = (
-            colorspace_specification_dict["color_matrix"]
-        )
+        colormatrix_param_value: str = (colorspace_specification_dict["color_matrix"])
 
         color_primaries_param: str = "--colorprim"
         color_primaries_param_value: str = (
@@ -192,9 +184,7 @@ class VideoTranscoding(object):
         limited_range_param_value: str,
     ):
         if color_range_param in set(transcoding_cmd_param_list):
-            param_key_index: int = (
-                transcoding_cmd_param_list.index(color_range_param)
-            )
+            param_key_index: int = (transcoding_cmd_param_list.index(color_range_param))
             param_value = transcoding_cmd_param_list[param_key_index + 1]
             if (
                 param_value == full_range_param_value
@@ -293,18 +283,11 @@ class VideoTranscoding(object):
 
         output_sar = other_config["output_sar"]
         if output_sar == "" or output_sar == "unchange":
-            if (
-                input_sar_dict["sar_num"] != 1
-                or input_sar_dict["sar_den"] != 1
-            ):
-                sar_value = (
-                    f"{input_sar_dict['sar_num']}:{input_sar_dict['sar_den']}"
-                )
+            if input_sar_dict["sar_num"] != 1 or input_sar_dict["sar_den"] != 1:
+                sar_value = f"{input_sar_dict['sar_num']}:{input_sar_dict['sar_den']}"
         else:
             output_sar_dict: dict = get_proper_sar(output_sar)
-            sar_value = (
-                f"{output_sar_dict['sar_num']}:{output_sar_dict['sar_den']}"
-            )
+            sar_value = f"{output_sar_dict['sar_num']}:{output_sar_dict['sar_den']}"
 
         if sar_value:
             sar_key = "--sar"
@@ -399,18 +382,14 @@ class FrameServerVideoTranscoding(VideoTranscoding):
                 f"input video file cannot be found with "
                 f"{frame_server_template_filepath}"
             )
-        self._frame_server_template_filepath: str = (
-            frame_server_template_filepath
-        )
+        self._frame_server_template_filepath: str = (frame_server_template_filepath)
 
         if not isinstance(frame_server_script_cache_dir, str):
             raise TypeError(
                 f"type of frame_server_script_cache_dir must be str "
                 f"instead of {type(frame_server_script_cache_dir)}"
             )
-        self._frame_server_script_cache_dir: str = (
-            frame_server_script_cache_dir
-        )
+        self._frame_server_script_cache_dir: str = (frame_server_script_cache_dir)
 
         if not isinstance(frame_server_script_filename, str):
             raise TypeError(
@@ -466,14 +445,12 @@ class NvencVideoTranscoding(VideoTranscoding):
             all_filename_list: list = os.listdir(nvenc_exe_dir)
             if self.nvenc_exe_filename not in all_filename_list:
                 raise FileNotFoundError(
-                    f"{self.nvenc_exe_filename} cannot be found in "
-                    f"{nvenc_exe_dir}"
+                    f"{self.nvenc_exe_filename} cannot be found in " f"{nvenc_exe_dir}"
                 )
         else:
             if not check_file_environ_path({self.nvenc_exe_filename}):
                 raise FileNotFoundError(
-                    f"{self.nvenc_exe_filename} cannot be found in "
-                    f"environment path"
+                    f"{self.nvenc_exe_filename} cannot be found in " f"environment path"
                 )
         self._nvenc_exe_dir = nvenc_exe_dir
 
@@ -510,8 +487,7 @@ class NvencVideoTranscoding(VideoTranscoding):
         assert (not codec_exist_bool and codec_key_index == -1) or (
             codec_exist_bool and codec_key_index > -1
         ), (
-            "codec_exist_bool and codec_key_index must be "
-            "significant simultaneously"
+            "codec_exist_bool and codec_key_index must be " "significant simultaneously"
         )
 
         if codec_exist_bool:
@@ -528,9 +504,7 @@ class NvencVideoTranscoding(VideoTranscoding):
         nvenc_exe_filepath: str = os.path.join(
             self._nvenc_exe_dir, self.nvenc_exe_filename
         )
-        output_video_fullname: str = (
-            self._output_video_filename + output_video_suffix
-        )
+        output_video_fullname: str = (self._output_video_filename + output_video_suffix)
         output_video_filepath: str = os.path.join(
             self._output_video_dir, output_video_fullname
         )
@@ -575,9 +549,7 @@ class NvencVideoTranscoding(VideoTranscoding):
         if os.path.isfile(log_filepath):
             os.remove(log_filepath)
 
-        nvenc_cmd_param_list = self._cmd_param_list_element_2_str(
-            nvenc_cmd_param_list
-        )
+        nvenc_cmd_param_list = self._cmd_param_list_element_2_str(nvenc_cmd_param_list)
 
         nvenc_param_debug_str: str = (
             f"transcode nvenc: param: "
@@ -586,8 +558,7 @@ class NvencVideoTranscoding(VideoTranscoding):
         g_logger.log(logging.DEBUG, nvenc_param_debug_str)
 
         start_info_str: str = (
-            f"transcode nvenc: starting transcoding "
-            f"{output_video_filepath}"
+            f"transcode nvenc: starting transcoding " f"{output_video_filepath}"
         )
 
         print(start_info_str, file=sys.stderr)
@@ -722,9 +693,7 @@ class VspipeVideoTranscoding(FrameServerVideoTranscoding):
     def _generate_vpy_script(self, segment_bool=False):
         if self._other_config["output_frame_rate_mode"] == "vfr":
             fps_info = get_fpsnum_and_fpsden(self._other_config["frame_rate"])
-            output_fps_info = get_fpsnum_and_fpsden(
-                self._other_config["frame_rate"]
-            )
+            output_fps_info = get_fpsnum_and_fpsden(self._other_config["frame_rate"])
         elif self._other_config["output_frame_rate_mode"] == "cfr":
             if self._other_config["frame_rate_mode"] == "vfr":
                 fps_info = get_fpsnum_and_fpsden(
@@ -737,9 +706,7 @@ class VspipeVideoTranscoding(FrameServerVideoTranscoding):
                     )
                 )
             elif self._other_config["frame_rate_mode"] == "cfr":
-                fps_info = get_fpsnum_and_fpsden(
-                    self._other_config["frame_rate"]
-                )
+                fps_info = get_fpsnum_and_fpsden(self._other_config["frame_rate"])
                 output_fps_info = get_fpsnum_and_fpsden(
                     self._get_proper_output_fps(
                         original_fps=self._other_config["frame_rate"],
@@ -775,23 +742,19 @@ class VspipeVideoTranscoding(FrameServerVideoTranscoding):
             "output_fps_num": output_fps_info.fps_num,
             "output_fps_den": output_fps_info.fps_den,
             "input_video_width": self._other_config["input_video_width"],
-            "2x_input_video_width": 2
-            * self._other_config["input_video_width"],
-            "4x_input_video_width": 4
-            * self._other_config["input_video_width"],
+            "2x_input_video_width": 2 * self._other_config["input_video_width"],
+            "4x_input_video_width": 4 * self._other_config["input_video_width"],
             "input_video_height": self._other_config["input_video_height"],
-            "2x_input_video_height": 2
-            * self._other_config["input_video_height"],
-            "4x_input_video_height": 4
-            * self._other_config["input_video_height"],
+            "2x_input_video_height": 2 * self._other_config["input_video_height"],
+            "4x_input_video_height": 4 * self._other_config["input_video_height"],
             "first_frame_index": 0 if segment_bool else -1,
             "last_frame_index": int(self._other_config["total_frame_cnt"])
             if segment_bool
             else -1,
             "vfr_bool": self._other_config["output_frame_rate_mode"] == "vfr",
-            "timecode_filepath": self._other_config[
-                "video_timecode_filepath"
-            ].replace("\\", "/"),
+            "timecode_filepath": self._other_config["video_timecode_filepath"].replace(
+                "\\", "/"
+            ),
             "hardcoded_subtitle_filepath": self._other_config[
                 "hardcoded_subtitle_filepath"
             ].replace("\\", "/"),
@@ -845,25 +808,20 @@ class X265VspipeVideoTranscoding(VspipeVideoTranscoding):
     ):
         if not isinstance(x265_exe_dir, str):
             raise TypeError(
-                f"type of x265_exe_dir must be str "
-                f"instead of {type(x265_exe_dir)}"
+                f"type of x265_exe_dir must be str " f"instead of {type(x265_exe_dir)}"
             )
         if x265_exe_dir:
             if not os.path.isdir(x265_exe_dir):
-                raise DirNotFoundError(
-                    f"x265 dir cannot be found with {x265_exe_dir}"
-                )
+                raise DirNotFoundError(f"x265 dir cannot be found with {x265_exe_dir}")
             all_filename_list: list = os.listdir(x265_exe_dir)
             if self.x265_exe_filename not in all_filename_list:
                 raise FileNotFoundError(
-                    f"{self.x265_exe_filename} cannot be found in "
-                    f"{x265_exe_dir}"
+                    f"{self.x265_exe_filename} cannot be found in " f"{x265_exe_dir}"
                 )
         else:
             if not check_file_environ_path({self.x265_exe_filename}):
                 raise FileNotFoundError(
-                    f"{self.x265_exe_filename} cannot be found in "
-                    f"environment path"
+                    f"{self.x265_exe_filename} cannot be found in " f"environment path"
                 )
         self._x265_exe_dir = x265_exe_dir
 
@@ -880,10 +838,7 @@ class X265VspipeVideoTranscoding(VspipeVideoTranscoding):
             vspipe_exe_dir,
         )
         for vspipe_x265_template in self.necessary_vspipe_x265_template_set:
-            if (
-                vspipe_x265_template
-                not in self._transcoding_cmd_param_template
-            ):
+            if vspipe_x265_template not in self._transcoding_cmd_param_template:
                 raise MissTemplateError(
                     message=f"transcoding_cmd_param_template misses \
 template {vspipe_x265_template}",
@@ -929,9 +884,7 @@ template {vspipe_x265_template}",
         csv_suffix: str = ".csv"
         csv_file_dir: str = self._frame_server_script_cache_dir
         csv_file_fullname: str = self._output_video_filename + csv_suffix
-        x265_csv_log_filepath: str = os.path.join(
-            csv_file_dir, csv_file_fullname
-        )
+        x265_csv_log_filepath: str = os.path.join(csv_file_dir, csv_file_fullname)
         x265_csv_log_param_value: str = x265_csv_log_filepath
         if x265_csv_log_param not in set(vspipe_x265_cmd_param_list):
             vspipe_x265_cmd_param_list += [
@@ -947,19 +900,11 @@ template {vspipe_x265_template}",
         width: int = self._vpy_template_dict["output_width"]
         height: int = self._vpy_template_dict["output_height"]
         vspipe_x265_cmd_param_list += self.color_matrix_cmd_params(
-            width,
-            height,
-            self._frame_server_template_config["output_bit_depth"],
+            width, height, self._frame_server_template_config["output_bit_depth"],
         )
-        self._process_fps_cmd_param(
-            vspipe_x265_cmd_param_list, self._other_config
-        )
-        self._process_sar_cmd_param(
-            vspipe_x265_cmd_param_list, self._other_config
-        )
-        self._process_hdr_cmd_param(
-            vspipe_x265_cmd_param_list, self._other_config
-        )
+        self._process_fps_cmd_param(vspipe_x265_cmd_param_list, self._other_config)
+        self._process_sar_cmd_param(vspipe_x265_cmd_param_list, self._other_config)
+        self._process_hdr_cmd_param(vspipe_x265_cmd_param_list, self._other_config)
         asuna_x265_stylish: str = "--stylish"
         if asuna_x265_stylish in set(vspipe_x265_cmd_param_list):
             vspipe_x265_cmd_param_list.pop(asuna_x265_stylish)
@@ -1031,9 +976,7 @@ template {vspipe_x265_template}",
                 end="\n",
                 file=sys.stderr,
             )
-            stderr_lines_deque: deque = deque(
-                maxlen=self.stderr_info_max_line_cnt
-            )
+            stderr_lines_deque: deque = deque(maxlen=self.stderr_info_max_line_cnt)
             while process.poll() is None:
                 current_line = process.stderr.readline()
                 if current_line:
@@ -1284,8 +1227,7 @@ class GopX265VspipeVideoTranscoding(X265VspipeVideoTranscoding):
         )
         self._gop_cache_filename = hash_name(self._gop_cache_filename)
         self._gop_cache_dir: str = os.path.join(
-            self._orginal_frame_server_script_cache_dir,
-            self._gop_cache_filename,
+            self._orginal_frame_server_script_cache_dir, self._gop_cache_filename,
         )
         if not os.path.isdir(self._gop_cache_dir):
             os.makedirs(self._gop_cache_dir)
@@ -1299,8 +1241,7 @@ class GopX265VspipeVideoTranscoding(X265VspipeVideoTranscoding):
             status_dict: dict = load_config(status_json_filepath)
         else:
             status_dict: dict = dict(
-                gop_frame_cnt=self._gop_frame_cnt,
-                segment_transcode_bool_dict=dict(),
+                gop_frame_cnt=self._gop_frame_cnt, segment_transcode_bool_dict=dict(),
             )
             for frame_index in range(
                 self._first_frame_index,
@@ -1324,28 +1265,19 @@ class GopX265VspipeVideoTranscoding(X265VspipeVideoTranscoding):
 
     def _transcode_segment(self):
         for frame_index in range(
-            self._first_frame_index,
-            self._last_frame_index + 1,
-            self._gop_frame_cnt,
+            self._first_frame_index, self._last_frame_index + 1, self._gop_frame_cnt,
         ):
             first_frame_index: int = frame_index
             last_frame_index: int = frame_index + self._gop_frame_cnt - 1
             if last_frame_index > self._last_frame_index:
                 last_frame_index = self._last_frame_index
             segment_identifier: str = self.segment_identifier_template.format(
-                first_frame_index=first_frame_index,
-                last_frame_index=last_frame_index,
+                first_frame_index=first_frame_index, last_frame_index=last_frame_index,
             )
-            if self._status_dict["segment_transcode_bool_dict"][
-                segment_identifier
-            ]:
+            if self._status_dict["segment_transcode_bool_dict"][segment_identifier]:
                 continue
-            self._frame_server_template_config[
-                "first_frame_index"
-            ] = first_frame_index
-            self._frame_server_template_config[
-                "last_frame_index"
-            ] = last_frame_index
+            self._frame_server_template_config["first_frame_index"] = first_frame_index
+            self._frame_server_template_config["last_frame_index"] = last_frame_index
             self._frame_server_script_cache_dir = self._gop_cache_dir
             self._output_video_dir = self._gop_cache_dir
 
@@ -1353,21 +1285,15 @@ class GopX265VspipeVideoTranscoding(X265VspipeVideoTranscoding):
                 self._original_output_video_filename + "_" + segment_identifier
             )
             print(self._output_video_filename)
-            self._output_video_filename = hash_name(
-                self._output_video_filename
-            )
+            self._output_video_filename = hash_name(self._output_video_filename)
             self._frame_server_script_filename = self._output_video_filename
-            gop_filepath: str = super(
-                GopX265VspipeVideoTranscoding, self
-            ).transcode()[0]
-            self._status_dict["segment_transcode_bool_dict"][
-                segment_identifier
-            ] = True
+            gop_filepath: str = super(GopX265VspipeVideoTranscoding, self).transcode()[
+                0
+            ]
+            self._status_dict["segment_transcode_bool_dict"][segment_identifier] = True
             if "gop_filepath_dict" not in self._status_dict.keys():
                 self._status_dict["gop_filepath_dict"] = {}
-            self._status_dict["gop_filepath_dict"][
-                segment_identifier
-            ] = gop_filepath
+            self._status_dict["gop_filepath_dict"][segment_identifier] = gop_filepath
             save_config(self._status_json_filepath, self._status_dict)
 
         self._all_gop_filepath_list: list = list(
@@ -1385,8 +1311,7 @@ class GopX265VspipeVideoTranscoding(X265VspipeVideoTranscoding):
             self._original_output_video_dir, output_video_filename
         )
         real_output_video_filename: str = (
-            self._original_output_video_filename
-            + self.gop_muxer_output_video_suffix
+            self._original_output_video_filename + self.gop_muxer_output_video_suffix
         )
         real_output_video_filepath: str = os.path.join(
             self._original_output_video_dir, real_output_video_filename
@@ -1415,7 +1340,7 @@ class GopX265VspipeVideoTranscoding(X265VspipeVideoTranscoding):
 
         process = subprocess.Popen(gop_muxer_cmd_param_list)
 
-        process.wait()
+        process.communicate()
 
         if process.returncode == 0:
             end_info_str: str = (
@@ -1487,15 +1412,9 @@ class SegmentedConfigX265VspipeTranscoding(GopX265VspipeVideoTranscoding):
                 f"instead of {type(segmented_transcode_config_list)}"
             )
         for segmented_transcode_config in segmented_transcode_config_list:
-            for frame_interval in segmented_transcode_config[
-                "frame_interval_list"
-            ]:
-                segment_first_frame_index: int = frame_interval[
-                    "first_frame_index"
-                ]
-                segment_last_frame_index: int = frame_interval[
-                    "last_frame_index"
-                ]
+            for frame_interval in segmented_transcode_config["frame_interval_list"]:
+                segment_first_frame_index: int = frame_interval["first_frame_index"]
+                segment_last_frame_index: int = frame_interval["last_frame_index"]
                 if not isinstance(segment_first_frame_index, int):
                     raise TypeError(
                         f"type of segment_first_frame_index must be int "
@@ -1504,8 +1423,7 @@ class SegmentedConfigX265VspipeTranscoding(GopX265VspipeVideoTranscoding):
                 if segment_first_frame_index < 0:
                     raise RangeError(
                         message=(
-                            f"value of segment_first_frame_index must "
-                            f"in [0,inf)"
+                            f"value of segment_first_frame_index must " f"in [0,inf)"
                         ),
                         valid_range=f"[0,inf)",
                     )
@@ -1518,8 +1436,7 @@ class SegmentedConfigX265VspipeTranscoding(GopX265VspipeVideoTranscoding):
                 if segment_last_frame_index < 0:
                     raise RangeError(
                         message=(
-                            f"value of segment_last_frame_index must "
-                            f"in [0,inf)"
+                            f"value of segment_last_frame_index must " f"in [0,inf)"
                         ),
                         valid_range=f"[0,inf)",
                     )
@@ -1570,27 +1487,21 @@ class SegmentedConfigX265VspipeTranscoding(GopX265VspipeVideoTranscoding):
                             "frame_server_template_filepath"
                         ],
                         frame_interval_dict=dict(
-                            first_frame_index=frame_interval_dict[
-                                "first_frame_index"
-                            ],
-                            last_frame_index=frame_interval_dict[
-                                "last_frame_index"
-                            ],
+                            first_frame_index=frame_interval_dict["first_frame_index"],
+                            last_frame_index=frame_interval_dict["last_frame_index"],
                         ),
                     )
                 )
         general_segmented_transcode_config_list.sort(
-            key=lambda element: element["frame_interval_dict"][
-                "first_frame_index"
-            ]
+            key=lambda element: element["frame_interval_dict"]["first_frame_index"]
         )
 
         if general_segmented_transcode_config_list:
             unspecified_segmented_transcode_config_list: list = []
             if (
-                general_segmented_transcode_config_list[0][
-                    "frame_interval_dict"
-                ]["first_frame_index"]
+                general_segmented_transcode_config_list[0]["frame_interval_dict"][
+                    "first_frame_index"
+                ]
                 > self._first_frame_index
             ):
                 unspecified_segmented_transcode_config_list.append(
@@ -1680,51 +1591,39 @@ class SegmentedConfigX265VspipeTranscoding(GopX265VspipeVideoTranscoding):
             ]
 
         general_segmented_transcode_config_list.sort(
-            key=lambda element: element["frame_interval_dict"][
-                "first_frame_index"
-            ]
+            key=lambda element: element["frame_interval_dict"]["first_frame_index"]
         )
 
         for element in general_segmented_transcode_config_list:
             print(element["frame_interval_dict"], file=sys.stderr)
             print(element["frame_server_template_filepath"], file=sys.stderr)
             print(
-                element["video_transcoding_cmd_param_template"],
-                file=sys.stderr,
+                element["video_transcoding_cmd_param_template"], file=sys.stderr,
             )
             print("", file=sys.stderr)
 
         hash_str_length: int = 6
         assumptive_path_length: int = len(
             self._frame_server_script_cache_dir
-        ) + hash_str_length * 2 + len(os.sep) * 2 + len(
-            "-000000.hevc-gop-data"
-        )
+        ) + hash_str_length * 2 + len(os.sep) * 2 + len("-000000.hevc-gop-data")
         print(
-            f"assumptive_path_length: {assumptive_path_length}",
-            file=sys.stderr,
+            f"assumptive_path_length: {assumptive_path_length}", file=sys.stderr,
         )
         if assumptive_path_length > self.windows_path_max_length:
             raise RuntimeError(
                 "Cache dir length is too long to save gop data. "
                 "Please decrease cache dir length!"
             )
-        assumptive_cmd_length: int = len(
-            general_segmented_transcode_config_list
-        ) * (
+        assumptive_cmd_length: int = len(general_segmented_transcode_config_list) * (
             len(self._frame_server_script_cache_dir)
             + hash_str_length * 2
             + len(os.sep) * 2
             + len(self.gop_suffix)
             + len(" ")
-        ) + len(
-            self.gop_muxer_exe_filename
-        ) + self.windows_path_max_length + len(
+        ) + len(self.gop_muxer_exe_filename) + self.windows_path_max_length + len(
             " "
         ) * 2
-        print(
-            f"assumptive_cmd_length: {assumptive_cmd_length}", file=sys.stderr
-        )
+        print(f"assumptive_cmd_length: {assumptive_cmd_length}", file=sys.stderr)
         if assumptive_cmd_length > self.windows_cmd_max_length:
             raise RuntimeError(
                 "Gop count is too many to pass parameter to windows CMD. "
@@ -1743,12 +1642,8 @@ class SegmentedConfigX265VspipeTranscoding(GopX265VspipeVideoTranscoding):
         all_gop_filepath_list: list = []
         self._gop_cache_dir_set: set = set()
         for config in self._general_segmented_transcode_config_list:
-            self._first_frame_index = config["frame_interval_dict"][
-                "first_frame_index"
-            ]
-            self._last_frame_index = config["frame_interval_dict"][
-                "last_frame_index"
-            ]
+            self._first_frame_index = config["frame_interval_dict"]["first_frame_index"]
+            self._last_frame_index = config["frame_interval_dict"]["last_frame_index"]
             self._match_output_fps()
             self._transcoding_cmd_param_template = config[
                 "video_transcoding_cmd_param_template"
@@ -1821,25 +1716,20 @@ class X264VspipeVideoTranscoding(VspipeVideoTranscoding):
     ):
         if not isinstance(x264_exe_dir, str):
             raise TypeError(
-                f"type of x264_exe_dir must be str "
-                f"instead of {type(x264_exe_dir)}"
+                f"type of x264_exe_dir must be str " f"instead of {type(x264_exe_dir)}"
             )
         if x264_exe_dir:
             if not os.path.isdir(x264_exe_dir):
-                raise DirNotFoundError(
-                    f"x264 dir cannot be found with {x264_exe_dir}"
-                )
+                raise DirNotFoundError(f"x264 dir cannot be found with {x264_exe_dir}")
             all_filename_list: list = os.listdir(x264_exe_dir)
             if self.x264_exe_filename not in all_filename_list:
                 raise FileNotFoundError(
-                    f"{self.x264_exe_filename} cannot be found in "
-                    f"{x264_exe_dir}"
+                    f"{self.x264_exe_filename} cannot be found in " f"{x264_exe_dir}"
                 )
         else:
             if not check_file_environ_path({self.x264_exe_filename}):
                 raise FileNotFoundError(
-                    f"{self.x264_exe_filename} cannot be found in "
-                    f"environment path"
+                    f"{self.x264_exe_filename} cannot be found in " f"environment path"
                 )
         self._x264_exe_dir = x264_exe_dir
 
@@ -1856,10 +1746,7 @@ class X264VspipeVideoTranscoding(VspipeVideoTranscoding):
             vspipe_exe_dir,
         )
         for vspipe_x264_template in self.necessary_vspipe_x264_template_set:
-            if (
-                vspipe_x264_template
-                not in self._transcoding_cmd_param_template
-            ):
+            if vspipe_x264_template not in self._transcoding_cmd_param_template:
                 raise MissTemplateError(
                     message=(
                         f"transcoding_cmd_param_template misses "
@@ -1872,9 +1759,7 @@ class X264VspipeVideoTranscoding(VspipeVideoTranscoding):
 
     def _delete_cache_files(self):
         constant = global_constant()
-        lwi_extension: str = (
-            constant.vapoursynth_lwlibavsource_cache_file_extension
-        )
+        lwi_extension: str = (constant.vapoursynth_lwlibavsource_cache_file_extension)
         lwi_filepath: str = self._input_video_filepath + lwi_extension
         if os.path.isfile(lwi_filepath):
             os.remove(lwi_filepath)
@@ -1886,9 +1771,7 @@ class X264VspipeVideoTranscoding(VspipeVideoTranscoding):
             self.x264_exe_filename
         )
 
-        output_video_fullname: str = (
-            self._output_video_filename + self.h264_extension
-        )
+        output_video_fullname: str = (self._output_video_filename + self.h264_extension)
         output_video_filepath: str = os.path.join(
             self._output_video_dir, output_video_fullname
         )
@@ -1908,8 +1791,7 @@ class X264VspipeVideoTranscoding(VspipeVideoTranscoding):
         )
         vspipe_progress_param_list: list = ["--progress", "-p"]
         exist_bool: bool = any(
-            param in vspipe_progress_param_list
-            for param in vspipe_x264_cmd_param_list
+            param in vspipe_progress_param_list for param in vspipe_x264_cmd_param_list
         )
         if not exist_bool:
             first_param = vspipe_x264_cmd_param_list[0]
@@ -1927,16 +1809,10 @@ class X264VspipeVideoTranscoding(VspipeVideoTranscoding):
         width: int = self._vpy_template_dict["output_width"]
         height: int = self._vpy_template_dict["output_height"]
         vspipe_x264_cmd_param_list += self.color_matrix_cmd_params(
-            width,
-            height,
-            self._frame_server_template_config["output_bit_depth"],
+            width, height, self._frame_server_template_config["output_bit_depth"],
         )
-        self._process_fps_cmd_param(
-            vspipe_x264_cmd_param_list, self._other_config
-        )
-        self._process_sar_cmd_param(
-            vspipe_x264_cmd_param_list, self._other_config
-        )
+        self._process_fps_cmd_param(vspipe_x264_cmd_param_list, self._other_config)
+        self._process_sar_cmd_param(vspipe_x264_cmd_param_list, self._other_config)
         x264_log_level_param: str = "--log-file-level"
         x264_log_level_param_value: str = "debug"
         if x264_log_level_param not in set(vspipe_x264_cmd_param_list):
@@ -2023,9 +1899,7 @@ class X264VspipeVideoTranscoding(VspipeVideoTranscoding):
                 end="\n",
                 file=sys.stderr,
             )
-            stderr_lines_deque: deque = deque(
-                maxlen=self.stderr_info_max_line_cnt
-            )
+            stderr_lines_deque: deque = deque(maxlen=self.stderr_info_max_line_cnt)
             while process.poll() is None:
                 current_line = process.stderr.readline()
                 if current_line:
@@ -2049,14 +1923,10 @@ class X264VspipeVideoTranscoding(VspipeVideoTranscoding):
                     encode_bitrate = float(re_result.group(3))
                 if total_frame_cnt != -1:
                     if x264_encoded_frame != -1:
-                        remain_frame_cnt: int = (
-                            total_frame_cnt - x264_encoded_frame
-                        )
+                        remain_frame_cnt: int = (total_frame_cnt - x264_encoded_frame)
                         remain_second: float = remain_frame_cnt / ave_fps
                         remain_minute: float = remain_second / 60
-                        percent: float = (
-                            x264_encoded_frame / total_frame_cnt * 100
-                        )
+                        percent: float = (x264_encoded_frame / total_frame_cnt * 100)
                         display_percent_str: str = f"{percent:.2f}%"
                         display_bitrate_str: str = f"{ave_bitrate:.2f}kbit/s"
                         display_remain_str: str = f"{remain_minute:.2f}min"
@@ -2081,10 +1951,7 @@ class X264VspipeVideoTranscoding(VspipeVideoTranscoding):
                         )
 
             print("\n", end="", file=sys.stderr)
-            if (
-                process.returncode == 0
-                and all_encoded_frame == total_frame_cnt
-            ):
+            if process.returncode == 0 and all_encoded_frame == total_frame_cnt:
                 encode_info_str: str = (
                     f"transcode x264: "
                     f"total frame cnt: {total_frame_cnt}, "
@@ -2163,14 +2030,12 @@ class NvencVspipeVideoTranscoding(VspipeVideoTranscoding):
             all_filename_list: list = os.listdir(nvenc_exe_dir)
             if self.nvenc_exe_filename not in all_filename_list:
                 raise FileNotFoundError(
-                    f"{self.nvenc_exe_filename} cannot be found in "
-                    f"{nvenc_exe_dir}"
+                    f"{self.nvenc_exe_filename} cannot be found in " f"{nvenc_exe_dir}"
                 )
         else:
             if not check_file_environ_path({self.nvenc_exe_filename}):
                 raise FileNotFoundError(
-                    f"{self.nvenc_exe_filename} cannot be found in "
-                    f"environment path"
+                    f"{self.nvenc_exe_filename} cannot be found in " f"environment path"
                 )
         self._nvenc_exe_dir = nvenc_exe_dir
 
@@ -2187,10 +2052,7 @@ class NvencVspipeVideoTranscoding(VspipeVideoTranscoding):
             vspipe_exe_dir,
         )
         for vspipe_nvenc_template in self.necessary_vspipe_nvenc_template_set:
-            if (
-                vspipe_nvenc_template
-                not in self._transcoding_cmd_param_template
-            ):
+            if vspipe_nvenc_template not in self._transcoding_cmd_param_template:
                 raise MissTemplateError(
                     message=(
                         f"transcoding_cmd_param_template misses "
@@ -2226,8 +2088,7 @@ class NvencVspipeVideoTranscoding(VspipeVideoTranscoding):
         assert (not codec_exist_bool and codec_key_index == -1) or (
             codec_exist_bool and codec_key_index > -1
         ), (
-            "codec_exist_bool and codec_key_index must be "
-            "significant simultaneously"
+            "codec_exist_bool and codec_key_index must be " "significant simultaneously"
         )
 
         if codec_exist_bool:
@@ -2245,9 +2106,7 @@ class NvencVspipeVideoTranscoding(VspipeVideoTranscoding):
             self._nvenc_exe_dir, self.nvenc_exe_filename
         )
 
-        output_video_fullname: str = (
-            self._output_video_filename + output_video_suffix
-        )
+        output_video_fullname: str = (self._output_video_filename + output_video_suffix)
         output_video_filepath: str = os.path.join(
             self._output_video_dir, output_video_fullname
         )
@@ -2281,19 +2140,11 @@ class NvencVspipeVideoTranscoding(VspipeVideoTranscoding):
         width: int = self._vpy_template_dict["output_width"]
         height: int = self._vpy_template_dict["output_height"]
         vspipe_nvenc_cmd_param_list += self.color_matrix_cmd_params(
-            width,
-            height,
-            self._frame_server_template_config["output_bit_depth"],
+            width, height, self._frame_server_template_config["output_bit_depth"],
         )
-        self._process_fps_cmd_param(
-            vspipe_nvenc_cmd_param_list, self._other_config
-        )
-        self._process_sar_cmd_param(
-            vspipe_nvenc_cmd_param_list, self._other_config
-        )
-        self._process_hdr_cmd_param(
-            vspipe_nvenc_cmd_param_list, self._other_config
-        )
+        self._process_fps_cmd_param(vspipe_nvenc_cmd_param_list, self._other_config)
+        self._process_sar_cmd_param(vspipe_nvenc_cmd_param_list, self._other_config)
+        self._process_hdr_cmd_param(vspipe_nvenc_cmd_param_list, self._other_config)
 
         log_param: str = "--log"
         log_suffix: str = ".log"
@@ -2318,8 +2169,7 @@ class NvencVspipeVideoTranscoding(VspipeVideoTranscoding):
         g_logger.log(logging.DEBUG, nvenc_param_debug_str)
 
         start_info_str: str = (
-            f"transcode vspipe nvenc: starting transcoding "
-            f"{output_video_filepath}"
+            f"transcode vspipe nvenc: starting transcoding " f"{output_video_filepath}"
         )
 
         print(start_info_str, file=sys.stderr)
@@ -2365,9 +2215,7 @@ def get_fpsnum_and_fpsden(fps: str):
     if "/" in fps:
         fps_data_list: list = fps.split("/")
         if len(fps_data_list) != 2:
-            raise ValueError(
-                f"len(fps_data_list) != 2 : " f"{len(fps_data_list) != 2}"
-            )
+            raise ValueError(f"len(fps_data_list) != 2 : " f"{len(fps_data_list) != 2}")
         fps_info_dict["fps_num"] = int(fps_data_list[0])
         fps_info_dict["fps_den"] = int(fps_data_list[1])
     elif fps.replace(".", "").isdigit():
@@ -2382,8 +2230,7 @@ def get_fpsnum_and_fpsden(fps: str):
         raise ValueError(f"unknown fps: {fps}")
 
     reduced_fps_dict: dict = get_reduced_fraction(
-        numerator=fps_info_dict["fps_num"],
-        denominator=fps_info_dict["fps_den"],
+        numerator=fps_info_dict["fps_num"], denominator=fps_info_dict["fps_den"],
     )
 
     fps_info_dict["fps_num"] = reduced_fps_dict["numerator"]

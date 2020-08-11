@@ -50,13 +50,17 @@ install python libraries.
 pip install -r requirements.txt
 ```
 
-install [MKVToolNix](https://mkvtoolnix.download/downloads.html), [GPAC](https://gpac.wp.imt.fr/downloads/), [NVEnc](https://github.com/rigaya/NVEnc/releases), [x265-Yuuki-Asuna](https://down.7086.in/x265-Yuuki-Asuna/), [x264-tmod](https://github.com/jpsdr/x264/releases), [gop_muxer](https://github.com/msg7086/gop_muxer/releases), [FFmpeg](http://ffmpeg.org/download.html), [FLAC](https://xiph.org/flac/download.html), [qaac](https://github.com/nu774/qaac/releases), [AppleApplicationSupport used by qaac](https://github.com/kiki-kiko/iTunes-12.3.1.23) and [Opus](https://opus-codec.org/downloads/), add their paths to environment variables.
+install [MKVToolNix](https://mkvtoolnix.download/downloads.html), [GPAC 0.8.0](https://www.videohelp.com/download/gpac-0.8.0-rev95-g00dfc933-master-x64.exe), [NVEnc](https://github.com/rigaya/NVEnc/releases), [x265-Yuuki-Asuna](https://down.7086.in/x265-Yuuki-Asuna/), [x264-tmod](https://github.com/jpsdr/x264/releases), [gop_muxer](https://github.com/msg7086/gop_muxer/releases), [FFmpeg](http://ffmpeg.org/download.html), [FLAC](https://xiph.org/flac/download.html), [qaac](https://github.com/nu774/qaac/releases), [AppleApplicationSupport used by qaac](https://github.com/kiki-kiko/iTunes-12.3.1.23) and [Opus](https://opus-codec.org/downloads/), add their paths to environment variables.
 
 install [vapoursynth](https://github.com/vapoursynth/vapoursynth/releases) or [vapoursynth-portable](https://github.com/theChaosCoder/vapoursynth-portable-FATPACK/releases) and add path of vspipe.exe to environment variables.
 
 ## Usage
 
-edit config files (data/config/config.json and data/config/param_template.json).
+edit default config files (data/config/config.json and data/config/param_template.json).
+
+supported config format: json(.json), yaml(.yaml .yml) and hocon(.conf .hocon).
+
+if you like other config format, you can change filepath of the config file in `compress.py`.
 
 ```shell
 python compress.py

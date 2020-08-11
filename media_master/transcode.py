@@ -49,6 +49,9 @@ from .util import (
     get_chapter_format_info_dict,
     get_printable,
     is_printable,
+    get_unique_printable_filename,
+    is_filename_with_valid_mark,
+    get_filename_with_valid_mark,
     load_config,
     multiplex_mkv,
     multiplex_mp4,
@@ -104,12 +107,15 @@ class CompleteVideoTranscoding(object):
         output_video_name: str,
         cache_dir: str,
         config: namedtuple,
+        basic_config: namedtuple,
     ):
         self._input_video_filepath: str = input_video_filepath
         self._output_video_dir: str = output_video_dir
         self._output_video_filename: str = output_video_name
         self._cache_dir: str = cache_dir
         self._config: namedtuple = config
+        self._basic_config: namedtuple = basic_config
+
         if not os.path.isdir(self._cache_dir):
             os.makedirs(self._cache_dir)
         if not os.path.isdir(self._output_video_dir):
@@ -129,6 +135,8 @@ class CompleteVideoTranscoding(object):
         ) + f"_{hash_name(self._output_video_filename)}"
 
         self._pre_multiplex_bool: bool = False
+
+        self._delete_cache_file_bool: bool = (self._basic_config.delete_cache_file_bool)
 
     def copy2new_dir(self, src_filepath: str, output_dir: str):
         if not os.path.isdir(output_dir):
@@ -183,9 +191,7 @@ class CompleteVideoTranscoding(object):
                 output_filepath: str = self.copy2new_dir(
                     src_filepath=filepath, output_dir=self._cache_dir
                 )
-                self._config.external_chapter_info[
-                    "filepath"
-                ] = output_filepath
+                self._config.external_chapter_info["filepath"] = output_filepath
                 copy_file_info_str: str = (
                     f"Path of {filepath} is too long, "
                     f"copy {filepath} to {output_filepath}"
@@ -228,18 +234,14 @@ class CompleteVideoTranscoding(object):
 
     def transcode(self) -> str:
         self.shorten_inputfile_paths()
-        self._pre_multiplex(pre_multiplex_filename=self._cache_media_filename)
+        self._pre_multiplex()
         thread_bool: bool = self._config.thread_bool
         if thread_bool:
             thread_subtitle = threading.Thread(
-                target=self._subtitle_process,
-                name="thread_subtitle",
-                kwargs=dict(),
+                target=self._subtitle_process, name="thread_subtitle", kwargs=dict(),
             )
             thread_chapter = threading.Thread(
-                target=self._chapter_process,
-                name="thread_chapter",
-                kwargs=dict(),
+                target=self._chapter_process, name="thread_chapter", kwargs=dict(),
             )
             thread_attachment = threading.Thread(
                 target=self._attachment_process,
@@ -285,11 +287,12 @@ class CompleteVideoTranscoding(object):
             self._video_stream_process()
 
         self._multiplex_all()
-        self._delete_cache_file()
+        if self._delete_cache_file_bool:
+            self._delete_cache_file()
 
         return self._output_video_filepath
 
-    def _pre_multiplex(self, pre_multiplex_filename: str):
+    def _pre_multiplex(self):
         mkvmerge_unsupported_extension_set: set = {".wmv"}
         mkv_extension: str = ".mkv"
 
@@ -297,16 +300,27 @@ class CompleteVideoTranscoding(object):
         filename, extension = os.path.splitext(input_full_filename)
 
         if extension != mkv_extension:
+
             pre_muliplex_filename: str = (
-                f"{pre_multiplex_filename}" f"_pre_multiplex"
+                f"{get_unique_printable_filename(self._input_video_filepath)}"
+                f"_pre_multiplex"
             )
-            pre_muliplex_full_filename: str = (
-                pre_muliplex_filename + mkv_extension
+            pre_muliplex_full_filename: str = pre_muliplex_filename + mkv_extension
+            valid_pre_muliplex_full_filename: str = get_filename_with_valid_mark(
+                pre_muliplex_full_filename
             )
+
             pre_muliplex_input_filepath: str = os.path.join(
                 self._cache_dir, pre_muliplex_full_filename
             )
-            if not os.path.isfile(pre_muliplex_input_filepath):
+            valid_pre_muliplex_input_filepath: str = os.path.join(
+                self._cache_dir, valid_pre_muliplex_full_filename
+            )
+
+            if os.path.isfile(pre_muliplex_input_filepath):
+                os.remove(pre_muliplex_input_filepath)
+
+            if not os.path.isfile(valid_pre_muliplex_input_filepath):
                 input_filepath: str = self._input_video_filepath
                 if extension.lower() in mkvmerge_unsupported_extension_set:
                     input_filepath: str = remultiplex_ffmpeg(
@@ -314,48 +328,46 @@ class CompleteVideoTranscoding(object):
                         output_file_dir=self._cache_dir,
                         output_file_name=pre_muliplex_filename + "_ffmpeg",
                         output_file_extension=mkv_extension,
+                        add_valid_mark_bool=True,
                     )
                     self._remove_filepath_set.add(input_filepath)
                 pre_muliplex_input_filepath: str = multiplex_mkv(
-                    track_info_list=[
-                        dict(filepath=input_filepath, track_id=-1)
-                    ],
+                    track_info_list=[dict(filepath=input_filepath, track_id=-1)],
                     output_file_dir=self._cache_dir,
                     output_file_name=pre_muliplex_filename,
+                    add_valid_mark_bool=True,
                 )
             self._pre_multiplex_bool = True
             self._remove_filepath_set.add(pre_muliplex_input_filepath)
             self._input_video_filepath = pre_muliplex_input_filepath
 
-    def _audio_transcode(
-        self, audio_track_file_list: list, filename_suffix=""
-    ) -> list:
+    def _audio_transcode(self, audio_track_file_list: list, filename_suffix="") -> list:
         transcoded_audio_track_file_list: list = []
         for index, audio_track_file in enumerate(audio_track_file_list):
             transcoded_audio_filename: str = (
-                self._cache_media_filename
-                + f"{filename_suffix}_audio_index_{index}"
+                self._cache_media_filename + f"{filename_suffix}_audio_index_{index}"
             )
+
             if self._config.audio_transcoding_method == "opus":
                 transcoded_audio_filepath: str = transcode_audio_opus(
                     audio_track_file.filepath,
-                    self._cache_dir,
-                    transcoded_audio_filename,
-                    self._config.audio_transcoding_cmd_param_template,
+                    output_file_dir=self._cache_dir,
+                    output_file_name=transcoded_audio_filename,
+                    opus_exe_config_list=self._config.audio_transcoding_cmd_param_template,
                 )
             elif self._config.audio_transcoding_method == "qaac":
                 transcoded_audio_filepath: str = transcode_audio_qaac(
                     audio_track_file.filepath,
-                    self._cache_dir,
-                    transcoded_audio_filename,
-                    self._config.audio_transcoding_cmd_param_template,
+                    output_file_dir=self._cache_dir,
+                    output_file_name=transcoded_audio_filename,
+                    qaac_exe_cmd_param_template=self._config.audio_transcoding_cmd_param_template,
                 )
             elif self._config.audio_transcoding_method == "flac":
                 transcoded_audio_filepath: str = (
                     transcode_audio_flac(
                         input_audio_filepath=audio_track_file.filepath,
-                        output_audio_dir=self._cache_dir,
-                        output_audio_name=transcoded_audio_filename,
+                        output_file_dir=self._cache_dir,
+                        output_file_name=transcoded_audio_filename,
                         flac_exe_cmd_param_template=self._config.audio_transcoding_cmd_param_template,
                     )
                 )
@@ -368,9 +380,7 @@ class CompleteVideoTranscoding(object):
 
             transcoded_audio_track_file = copy.deepcopy(audio_track_file)
             transcoded_audio_track_file.filepath = transcoded_audio_filepath
-            transcoded_audio_track_file_list.append(
-                transcoded_audio_track_file
-            )
+            transcoded_audio_track_file_list.append(transcoded_audio_track_file)
 
             if self._config.internal_audio_track_to_process == "default":
                 continue
@@ -418,9 +428,7 @@ class CompleteVideoTranscoding(object):
                     f"Unknown internal_audio_process_option: "
                     f"{self._config.internal_audio_track_to_process}"
                 ),
-                valid_range=str(
-                    internal_audio_track_to_process_available_option_set
-                ),
+                valid_range=str(internal_audio_track_to_process_available_option_set),
             )
         if (
             self._config.external_audio_process_option
@@ -434,14 +442,10 @@ class CompleteVideoTranscoding(object):
                 valid_range=str(external_audio_process_available_option_set),
             )
 
-        if (
-            self._config.audio_prior_option
-            not in audio_prior_available_option_set
-        ):
+        if self._config.audio_prior_option not in audio_prior_available_option_set:
             raise RangeError(
                 message=(
-                    f"Unknown audio_prior_option: "
-                    f"{self._config.audio_prior_option}"
+                    f"Unknown audio_prior_option: " f"{self._config.audio_prior_option}"
                 ),
                 valid_range=str(audio_prior_available_option_set),
             )
@@ -450,8 +454,10 @@ class CompleteVideoTranscoding(object):
         if self._config.internal_audio_process_option != "skip":
             internal_audio_track_file_list: list = extract_audio_track(
                 self._input_video_filepath,
-                self._cache_dir,
-                self._cache_media_filename,
+                output_file_dir=self._cache_dir,
+                output_file_name=get_unique_printable_filename(
+                    self._input_video_filepath
+                ),
                 audio_track=self._config.internal_audio_track_to_process,
             )
             self._remove_filepath_set |= set(
@@ -462,9 +468,7 @@ class CompleteVideoTranscoding(object):
                 if index < len(self._config.internal_audio_info_list):
                     internal_audio_track_file_list[
                         index
-                    ].title = self._config.internal_audio_info_list[index][
-                        "title"
-                    ]
+                    ].title = self._config.internal_audio_info_list[index]["title"]
                     internal_audio_track_file_list[
                         index
                     ].language = self._config.internal_audio_info_list[index][
@@ -496,7 +500,9 @@ class CompleteVideoTranscoding(object):
                         extract_audio_track(
                             input_filepath=external_audio_info["filepath"],
                             output_file_dir=self._cache_dir,
-                            output_file_name=self._cache_media_filename
+                            output_file_name=get_unique_printable_filename(
+                                external_audio_info["filepath"]
+                            )
                             + f"_audio_container_index_{index}",
                             audio_track="all",
                         )
@@ -516,9 +522,7 @@ class CompleteVideoTranscoding(object):
                         )[: len(external_audio_info["track_index_list"])]
 
                     for index in range(len(current_all_audio_track_file_list)):
-                        current_all_audio_track_file_list[
-                            index
-                        ].delay_ms = int(
+                        current_all_audio_track_file_list[index].delay_ms = int(
                             external_audio_info["delay_ms"][index]
                         )
                         if external_audio_info["title"][index]:
@@ -568,9 +572,7 @@ class CompleteVideoTranscoding(object):
                 internal_audio_track_file_list, filename_suffix="_internal"
             )
         elif self._config.internal_audio_process_option == "copy":
-            output_internal_audio_track_file_list += (
-                internal_audio_track_file_list
-            )
+            output_internal_audio_track_file_list += internal_audio_track_file_list
         elif self._config.internal_audio_process_option == "skip":
             pass
         else:
@@ -583,9 +585,7 @@ class CompleteVideoTranscoding(object):
                     external_audio_track_file_list, filename_suffix="_external"
                 )
             elif self._config.external_audio_process_option == "copy":
-                output_external_audio_track_file_list += (
-                    external_audio_track_file_list
-                )
+                output_external_audio_track_file_list += external_audio_track_file_list
             else:
                 raise RuntimeError("It's impossible to execute this code.")
 
@@ -604,134 +604,135 @@ class CompleteVideoTranscoding(object):
             raise RuntimeError("It's impossible to execute this code.")
 
     def _subtitle_process(self):
-        subtitle_prior_available_option_set: set = {"internal", "external"}
+        self._output_text_track_file_list: list = []
+        if self._config.package_format == "mkv":
+            subtitle_prior_available_option_set: set = {"internal", "external"}
 
-        if (
-            self._config.subtitle_prior_option
-            not in subtitle_prior_available_option_set
-        ):
-            raise RangeError(
-                message=(
-                    f"Unknown subtitle_prior_option: "
-                    f"{self._config.subtitle_prior_option}"
-                ),
-                valid_range=str(subtitle_prior_available_option_set),
-            )
-
-        external_subtitle_info_list: list = copy.deepcopy(
-            self._config.external_subtitle_info_list
-        )
-        external_text_track_file_list: list = []
-        for index, external_subtitle_info in enumerate(
-            external_subtitle_info_list
-        ):
-            if external_subtitle_info["track_index_list"]:
-                current_all_subtitle_track_file_list: list = (
-                    extract_all_subtitles(
-                        input_filepath=external_subtitle_info["filepath"],
-                        output_file_dir=self._cache_dir,
-                        output_file_name=self._cache_media_filename
-                        + f"_subtitle_container_index_{index}",
-                    )
+            if (
+                self._config.subtitle_prior_option
+                not in subtitle_prior_available_option_set
+            ):
+                raise RangeError(
+                    message=(
+                        f"Unknown subtitle_prior_option: "
+                        f"{self._config.subtitle_prior_option}"
+                    ),
+                    valid_range=str(subtitle_prior_available_option_set),
                 )
 
-                for extracted_track in current_all_subtitle_track_file_list:
-                    self._remove_filepath_set.add(extracted_track.filepath)
+            external_subtitle_info_list: list = copy.deepcopy(
+                self._config.external_subtitle_info_list
+            )
 
-                print(current_all_subtitle_track_file_list)
-                print(external_subtitle_info["track_index_list"])
-
-                if len(current_all_subtitle_track_file_list) >= len(
-                    external_subtitle_info["track_index_list"]
-                ):
-                    current_all_subtitle_track_file_list = resort(
-                        src=current_all_subtitle_track_file_list,
-                        order_list=copy.deepcopy(
-                            external_subtitle_info["track_index_list"]
-                        ),
-                    )[: len(external_subtitle_info["track_index_list"])]
-
-                for index in range(len(current_all_subtitle_track_file_list)):
-                    current_all_subtitle_track_file_list[index].delay_ms = int(
-                        external_subtitle_info["delay_ms"][index]
+            external_text_track_file_list: list = []
+            for index, external_subtitle_info in enumerate(external_subtitle_info_list):
+                if external_subtitle_info["track_index_list"]:
+                    current_all_subtitle_track_file_list: list = (
+                        extract_all_subtitles(
+                            input_filepath=external_subtitle_info["filepath"],
+                            output_file_dir=self._cache_dir,
+                            output_file_name=get_unique_printable_filename(
+                                external_subtitle_info["filepath"]
+                            )
+                            + f"_subtitle_container_index_{index}",
+                        )
                     )
-                    if external_subtitle_info["title"][index]:
-                        current_all_subtitle_track_file_list[
+
+                    for extracted_track in current_all_subtitle_track_file_list:
+                        self._remove_filepath_set.add(extracted_track.filepath)
+
+                    print(current_all_subtitle_track_file_list)
+                    print(external_subtitle_info["track_index_list"])
+
+                    if len(current_all_subtitle_track_file_list) >= len(
+                        external_subtitle_info["track_index_list"]
+                    ):
+                        current_all_subtitle_track_file_list = resort(
+                            src=current_all_subtitle_track_file_list,
+                            order_list=copy.deepcopy(
+                                external_subtitle_info["track_index_list"]
+                            ),
+                        )[: len(external_subtitle_info["track_index_list"])]
+
+                    for index in range(len(current_all_subtitle_track_file_list)):
+                        current_all_subtitle_track_file_list[index].delay_ms = int(
+                            external_subtitle_info["delay_ms"][index]
+                        )
+                        if external_subtitle_info["title"][index]:
+                            current_all_subtitle_track_file_list[
+                                index
+                            ].title = external_subtitle_info["title"][index]
+                        if external_subtitle_info["language"][index]:
+                            current_all_subtitle_track_file_list[
+                                index
+                            ].language = external_subtitle_info["language"][index]
+                    external_text_track_file_list.extend(
+                        current_all_subtitle_track_file_list
+                    )
+                else:
+                    text_track_file = TextTrackFile(
+                        filepath=external_subtitle_info["filepath"],
+                        track_index=0,
+                        track_format=external_subtitle_info["filepath"].split(".")[-1],
+                        duration_ms=-1,
+                        bit_rate_bps=-1,
+                        delay_ms=external_subtitle_info["delay_ms"],
+                        stream_size_byte=-1,
+                        title=external_subtitle_info["title"],
+                        language=external_subtitle_info["language"],
+                        default_bool=True if index == 1 else False,
+                        forced_bool=False,
+                    )
+                    external_text_track_file_list.append(text_track_file)
+
+            internal_text_track_file_list: list = []
+            if self._config.copy_internal_subtitle_bool:
+                text_track_file_list: list = copy.deepcopy(
+                    extract_all_subtitles(
+                        self._input_video_filepath,
+                        self._cache_dir,
+                        get_unique_printable_filename(self._input_video_filepath),
+                    )
+                )
+                for index in range(len(text_track_file_list)):
+                    self._remove_filepath_set.add(text_track_file_list[index].filepath)
+                    if index < len(self._config.internal_subtitle_info_list):
+                        text_track_file_list[
                             index
-                        ].title = external_subtitle_info["title"][index]
-                    if external_subtitle_info["language"][index]:
-                        current_all_subtitle_track_file_list[
+                        ].title = self._config.internal_subtitle_info_list[index][
+                            "title"
+                        ]
+                        text_track_file_list[
                             index
-                        ].language = external_subtitle_info["language"][index]
-                external_text_track_file_list.extend(
-                    current_all_subtitle_track_file_list
+                        ].language = self._config.internal_subtitle_info_list[index][
+                            "language"
+                        ]
+
+                if self._config.internal_subtitle_track_order_list:
+                    text_track_file_list = resort(
+                        src=text_track_file_list,
+                        order_list=copy.deepcopy(
+                            self._config.internal_subtitle_track_order_list
+                        ),
+                    )
+
+                internal_text_track_file_list += text_track_file_list
+
+            if self._config.subtitle_prior_option == "internal":
+                self._output_text_track_file_list: list = (
+                    internal_text_track_file_list + external_text_track_file_list
+                )
+            elif self._config.subtitle_prior_option == "external":
+                self._output_text_track_file_list: list = (
+                    external_text_track_file_list + internal_text_track_file_list
                 )
             else:
-                text_track_file = TextTrackFile(
-                    filepath=external_subtitle_info["filepath"],
-                    track_index=0,
-                    track_format=external_subtitle_info["filepath"].split(".")[
-                        -1
-                    ],
-                    duration_ms=-1,
-                    bit_rate_bps=-1,
-                    delay_ms=external_subtitle_info["delay_ms"],
-                    stream_size_byte=-1,
-                    title=external_subtitle_info["title"],
-                    language=external_subtitle_info["language"],
-                    default_bool=True if index == 1 else False,
-                    forced_bool=False,
-                )
-                external_text_track_file_list.append(text_track_file)
+                raise RuntimeError("It's impossible to execute this code.")
 
-        internal_text_track_file_list: list = []
-        if self._config.copy_internal_subtitle_bool:
-            text_track_file_list: list = copy.deepcopy(
-                extract_all_subtitles(
-                    self._input_video_filepath,
-                    self._cache_dir,
-                    self._cache_media_filename,
-                )
-            )
-            for index in range(len(text_track_file_list)):
-                self._remove_filepath_set.add(
-                    text_track_file_list[index].filepath
-                )
-                if index < len(self._config.internal_subtitle_info_list):
-                    text_track_file_list[
-                        index
-                    ].title = self._config.internal_subtitle_info_list[index][
-                        "title"
-                    ]
-                    text_track_file_list[
-                        index
-                    ].language = self._config.internal_subtitle_info_list[
-                        index
-                    ][
-                        "language"
-                    ]
-
-            if self._config.internal_subtitle_track_order_list:
-                text_track_file_list = resort(
-                    src=text_track_file_list,
-                    order_list=copy.deepcopy(
-                        self._config.internal_subtitle_track_order_list
-                    ),
-                )
-
-            internal_text_track_file_list += text_track_file_list
-
-        self._output_text_track_file_list: list = []
-        if self._config.subtitle_prior_option == "internal":
-            self._output_text_track_file_list: list = (
-                internal_text_track_file_list + external_text_track_file_list
-            )
-        elif self._config.subtitle_prior_option == "external":
-            self._output_text_track_file_list: list = (
-                external_text_track_file_list + internal_text_track_file_list
-            )
+        elif self._config.package_format == "mp4":
+            pass
         else:
-            raise RuntimeError("It's impossible to execute this code.")
+            raise ValueError
 
     def _chapter_process(self):
         all_chapter_format_info_dict: dict = get_chapter_format_info_dict()
@@ -755,21 +756,23 @@ class CompleteVideoTranscoding(object):
                 for chapter_extension in chapter_extension_set
             ):
                 dst_chapter_filepath: str = convert_chapter_format(
-                    src_chapter_filepath=self._config.external_chapter_info[
-                        "filepath"
-                    ],
+                    src_chapter_filepath=self._config.external_chapter_info["filepath"],
                     output_dir=self._cache_dir,
-                    output_filename=self._cache_media_filename + "_chapter",
+                    output_filename=get_unique_printable_filename(
+                        self._config.external_chapter_info["filepath"]
+                    )
+                    + "_chapter",
                     dst_chapter_format=dst_chapter_format,
                 )
-                self._menu_track_file = MenuTrackFile(
-                    filepath=dst_chapter_filepath
-                )
+                self._menu_track_file = MenuTrackFile(filepath=dst_chapter_filepath)
             else:
                 self._menu_track_file = extract_chapter(
                     self._config.external_chapter_info["filepath"],
                     output_file_dir=self._cache_dir,
-                    output_file_name=self._cache_media_filename + "_chapter",
+                    output_file_name=get_unique_printable_filename(
+                        self._config.external_chapter_info["filepath"]
+                    )
+                    + "_chapter",
                     chapter_format=dst_chapter_format,
                 )
                 if self._menu_track_file is None:
@@ -781,25 +784,31 @@ class CompleteVideoTranscoding(object):
             self._menu_track_file = extract_chapter(
                 self._input_video_filepath,
                 output_file_dir=self._cache_dir,
-                output_file_name=self._cache_media_filename + "_chapter",
+                output_file_name=get_unique_printable_filename(
+                    self._input_video_filepath
+                )
+                + "_chapter",
                 chapter_format=dst_chapter_format,
             )
             if self._menu_track_file is None:
                 self._menu_track_file = MenuTrackFile(filepath="")
 
     def _attachment_process(self):
-        self._attachments_filepath_set = set()
-        if self._config.copy_internal_attachment_bool:
-            self._attachments_filepath_set |= set(
-                extract_all_attachments(
-                    self._input_video_filepath, self._cache_file_dir
+        if self._config.package_format == "mkv":
+            self._attachments_filepath_set = set()
+            if self._config.copy_internal_attachment_bool:
+                self._attachments_filepath_set |= set(
+                    extract_all_attachments(self._input_video_filepath, self._cache_dir)
                 )
-            )
-            self._remove_filepath_set |= self._attachments_filepath_set
-        if self._config.external_attachment_filepath_list:
-            self._attachments_filepath_set |= set(
-                self._config.external_attachment_filepath_list
-            )
+                self._remove_filepath_set |= self._attachments_filepath_set
+            if self._config.external_attachment_filepath_list:
+                self._attachments_filepath_set |= set(
+                    self._config.external_attachment_filepath_list
+                )
+        elif self._config.package_format == "mp4":
+            pass
+        else:
+            raise ValueError
 
     def _video_stream_process(self):
         self._video_timecode_filepath: str = ""
@@ -810,7 +819,9 @@ class CompleteVideoTranscoding(object):
                 self._video_track_file = extract_video_track(
                     input_filepath=self._input_video_filepath,
                     output_file_dir=self._cache_dir,
-                    output_file_name=self._cache_media_filename,
+                    output_file_name=get_unique_printable_filename(
+                        self._input_video_filepath
+                    ),
                 )
 
                 self._thread_lock.acquire()
@@ -821,7 +832,9 @@ class CompleteVideoTranscoding(object):
                     self._video_timecode_filepath = extract_mkv_video_timecode(
                         filepath=self._input_video_filepath,
                         output_dir=self._cache_dir,
-                        output_name=self._cache_media_filename,
+                        output_name=get_unique_printable_filename(
+                            self._input_video_filepath
+                        ),
                     )
                     self._first_multiplex_mkv_bool = True
                 self._remove_filepath_set.add(self._video_track_file.filepath)
@@ -841,9 +854,7 @@ class CompleteVideoTranscoding(object):
                     ),
                     None,
                 )
-                frame_rate_info_dict: dict = get_fr_and_original_fr(
-                    video_info_dict
-                )
+                frame_rate_info_dict: dict = get_fr_and_original_fr(video_info_dict)
 
                 color_specification_dict: dict = (
                     get_proper_color_specification(video_info_dict)
@@ -851,9 +862,7 @@ class CompleteVideoTranscoding(object):
 
                 self._video_track_file: VideoTrackFile = VideoTrackFile(
                     filepath=self._input_video_filepath,
-                    track_index=get_stream_order(
-                        video_info_dict["streamorder"]
-                    ),
+                    track_index=get_stream_order(video_info_dict["streamorder"]),
                     track_format=video_info_dict["format"].lower(),
                     duration_ms=int(float(video_info_dict["duration"])),
                     bit_rate_bps=int(video_info_dict["bit_rate"])
@@ -863,9 +872,7 @@ class CompleteVideoTranscoding(object):
                     height=video_info_dict["height"],
                     frame_rate_mode=video_info_dict["frame_rate_mode"].lower(),
                     frame_rate=frame_rate_info_dict["frame_rate"],
-                    original_frame_rate=frame_rate_info_dict[
-                        "original_frame_rate"
-                    ],
+                    original_frame_rate=frame_rate_info_dict["original_frame_rate"],
                     frame_count=int(video_info_dict["frame_count"]),
                     color_range=video_info_dict["color_range"].lower()
                     if "color_range" in video_info_dict.keys()
@@ -874,9 +881,7 @@ class CompleteVideoTranscoding(object):
                     if "color_space" in video_info_dict.keys()
                     else "",
                     color_matrix=color_specification_dict["color_matrix"],
-                    color_primaries=color_specification_dict[
-                        "color_primaries"
-                    ],
+                    color_primaries=color_specification_dict["color_primaries"],
                     transfer=color_specification_dict["transfer"],
                     chroma_subsampling=video_info_dict["chroma_subsampling"]
                     if "chroma_subsampling" in video_info_dict.keys()
@@ -900,16 +905,12 @@ class CompleteVideoTranscoding(object):
                     default_bool=True
                     if "default" not in video_info_dict.keys()
                     else (
-                        True
-                        if video_info_dict["default"].lower() == "yes"
-                        else False
+                        True if video_info_dict["default"].lower() == "yes" else False
                     ),
                     forced_bool=True
                     if "forced" not in video_info_dict.keys()
                     else (
-                        True
-                        if video_info_dict["forced"].lower() == "yes"
-                        else False
+                        True if video_info_dict["forced"].lower() == "yes" else False
                     ),
                 )
 
@@ -919,7 +920,9 @@ class CompleteVideoTranscoding(object):
             self._video_track_file = copy_video(
                 input_filepath=self._input_video_filepath,
                 output_file_dir=self._cache_dir,
-                output_file_name=self._cache_media_filename,
+                output_file_name=get_unique_printable_filename(
+                    self._input_video_filepath
+                ),
                 using_original_if_possible=self._pre_multiplex_bool,
             )
 
@@ -931,10 +934,7 @@ class CompleteVideoTranscoding(object):
                 self._remove_filepath_set.add(self._video_track_file.filepath)
 
             output_frame_rate_mode: str = self._config.output_frame_rate_mode
-            if (
-                output_frame_rate_mode == ""
-                or output_frame_rate_mode == "auto"
-            ):
+            if output_frame_rate_mode == "" or output_frame_rate_mode == "auto":
                 output_frame_rate_mode = self._video_track_file.frame_rate_mode
 
             if output_frame_rate_mode == "unchange":
@@ -942,9 +942,7 @@ class CompleteVideoTranscoding(object):
 
             if output_frame_rate_mode == "vfr":
                 if self._video_track_file.frame_rate_mode == "cfr":
-                    raise ValueError(
-                        f"input video of cfr only support cfr output."
-                    )
+                    raise ValueError(f"input video of cfr only support cfr output.")
                 if self._config.package_format == "mp4":
                     self._first_multiplex_mkv_bool = True
                 if (
@@ -961,7 +959,9 @@ class CompleteVideoTranscoding(object):
                 self._video_timecode_filepath = extract_mkv_video_timecode(
                     filepath=self._input_video_filepath,
                     output_dir=self._cache_dir,
-                    output_name=self._cache_media_filename,
+                    output_name=get_unique_printable_filename(
+                        self._input_video_filepath
+                    ),
                 )
 
             output_dynamic_range_mode: str = ""
@@ -975,13 +975,9 @@ class CompleteVideoTranscoding(object):
             elif self._config.output_dynamic_range_mode == "hdr":
                 if not self._video_track_file.hdr_bool:
                     raise ValueError("sdr to hdr is not supported.")
-                output_dynamic_range_mode = (
-                    self._config.output_dynamic_range_mode
-                )
+                output_dynamic_range_mode = self._config.output_dynamic_range_mode
             elif self._config.output_dynamic_range_mode == "hdr":
-                output_dynamic_range_mode = (
-                    self._config.output_dynamic_range_mode
-                )
+                output_dynamic_range_mode = self._config.output_dynamic_range_mode
             else:
                 raise ValueError(
                     f"unknown output_dynamic_range_mode: "
@@ -992,26 +988,60 @@ class CompleteVideoTranscoding(object):
                 output_dynamic_range_mode == "hdr"
                 and self._config.video_transcoding_method == "x264"
             ):
-                raise ValueError(f"avc does not support hdr")
+                raise ValueError("avc does not support hdr")
+
+            def hardcoded_subtitle_copy(input_filepath: str, output_file_dir: str):
+                _, input_extension = os.path.splitext(input_filepath)
+                output_filename_fullname: str = (
+                    get_unique_printable_filename(input_filepath)
+                    + "_hardcoded_subtitle"
+                    + input_extension
+                )
+                output_filepath: str = os.path.join(
+                    output_file_dir, output_filename_fullname
+                )
+
+                valid_output_filename_fullname: str = get_filename_with_valid_mark(
+                    output_filename_fullname
+                )
+                valid_output_filepath: str = os.path.join(
+                    output_file_dir, valid_output_filename_fullname
+                )
+
+                if os.path.isfile(output_filepath):
+                    os.remove(output_filepath)
+
+                if os.path.isfile(valid_output_filepath):
+                    skip_info_str: str = (
+                        f"copy subtitle: {valid_output_filepath} "
+                        f"already existed, skip copy."
+                    )
+
+                    print(skip_info_str, file=sys.stderr)
+                    g_logger.log(logging.INFO, skip_info_str)
+                    return valid_output_filepath
+
+                copy_file_info_str: str = (
+                    f"copy subtitle: copy " f"{input_filepath} to " f"{output_filepath}"
+                )
+                print(copy_file_info_str, file=sys.stderr)
+                g_logger.log(logging.INFO, copy_file_info_str)
+
+                shutil.copyfile(
+                    input_filepath, output_filepath,
+                )
+                os.rename(output_filepath, valid_output_filepath)
+                output_filepath = valid_output_filepath
+
+                return output_filepath
 
             hardcoded_subtitle_filepath: str = ""
-            if self._config.hardcoded_subtitle_info[
-                "filepath"
-            ] and os.path.isfile(
+            if self._config.hardcoded_subtitle_info["filepath"] and os.path.isfile(
                 self._config.hardcoded_subtitle_info["filepath"]
             ):
-                _, subtitle_extension = os.path.splitext(
-                    self._config.hardcoded_subtitle_info["filepath"]
-                )
-                hardcoded_subtitle_filepath = os.path.join(
-                    self._cache_dir,
-                    self._cache_media_filename
-                    + "_hardcoded_subtitle"
-                    + subtitle_extension,
-                )
-                shutil.copyfile(
+                hardcoded_subtitle_filepath: str = hardcoded_subtitle_copy(
                     self._config.hardcoded_subtitle_info["filepath"],
-                    hardcoded_subtitle_filepath,
+                    output_file_dir=self._cache_dir,
                 )
                 self._remove_filepath_set.add(hardcoded_subtitle_filepath)
 
@@ -1068,8 +1098,7 @@ class CompleteVideoTranscoding(object):
                                 "gop_frame_cnt"
                             ],
                             first_frame_index=0,
-                            last_frame_index=self._video_track_file.frame_count
-                            - 1,
+                            last_frame_index=self._video_track_file.frame_count - 1,
                             segmented_transcode_config_list=self._config.segmented_transcode_config_list,
                         )
                     else:
@@ -1091,8 +1120,7 @@ class CompleteVideoTranscoding(object):
                                 "gop_frame_cnt"
                             ],
                             first_frame_index=0,
-                            last_frame_index=self._video_track_file.frame_count
-                            - 1,
+                            last_frame_index=self._video_track_file.frame_count - 1,
                         )
                     result = x265_transcoding_mission.transcode()
                     compressed_video_cache_filepath: str = result
@@ -1102,9 +1130,7 @@ class CompleteVideoTranscoding(object):
                         self._config.frame_server_template_filepath,
                         self._cache_dir,
                         self._cache_media_filename,
-                        copy.deepcopy(
-                            self._config.frame_server_template_config
-                        ),
+                        copy.deepcopy(self._config.frame_server_template_config),
                         self._cache_dir,
                         self._cache_media_filename,
                         copy.deepcopy(
@@ -1168,29 +1194,19 @@ class CompleteVideoTranscoding(object):
                     )
             else:
                 raise RangeError(
-                    message=(
-                        f"Unknown frameserver: {self._config.frame_server}"
-                    ),
+                    message=(f"Unknown frameserver: {self._config.frame_server}"),
                     valid_range=str({"vspipe", ""}),
                 )
             media_info_list: list = MediaInfo.parse(
                 compressed_video_cache_filepath
             ).to_data()["tracks"]
             video_info_dict: dict = next(
-                (
-                    track
-                    for track in media_info_list
-                    if track["track_type"] == "Video"
-                ),
+                (track for track in media_info_list if track["track_type"] == "Video"),
                 None,
             )
 
-            self._output_video_track_file = copy.deepcopy(
-                self._video_track_file
-            )
-            self._output_video_track_file.filepath = (
-                compressed_video_cache_filepath
-            )
+            self._output_video_track_file = copy.deepcopy(self._video_track_file)
+            self._output_video_track_file.filepath = compressed_video_cache_filepath
             self._output_video_track_file.track_index = 0
             self._remove_filepath_set.add(compressed_video_cache_filepath)
 
@@ -1271,25 +1287,20 @@ class CompleteVideoTranscoding(object):
                 )
         else:
             raise RangeError(
-                message=(
-                    f"Unknown package_format: "
-                    f"{self._config.package_format}"
-                ),
+                message=(f"Unknown package_format: " f"{self._config.package_format}"),
                 valid_range=str({"mkv", "mp4"}),
             )
 
     def _delete_cache_file(self):
-        origin_video_cache_filename: str = os.path.basename(
+        original_video_cache_filename: str = os.path.basename(
             self._video_track_file.filepath
         )
         for filename in set(os.listdir(self._cache_dir)):
             if (
-                origin_video_cache_filename in filename
-                and filename != origin_video_cache_filename
+                original_video_cache_filename in filename
+                and filename != original_video_cache_filename
             ):
-                self._remove_filepath_set.add(
-                    os.path.join(self._cache_dir, filename)
-                )
+                self._remove_filepath_set.add(os.path.join(self._cache_dir, filename))
 
         for filepath in self._remove_filepath_set:
             if os.path.isfile(filepath):
@@ -1324,6 +1335,7 @@ class SeriesVideoTranscoding(object):
         cache_dir: str,
         episode_list: list,
         config: namedtuple,
+        basic_config: namedtuple,
     ):
         self._input_video_dir: str = input_video_dir
         self._input_video_filename_reexp: str = input_video_filename_reexp
@@ -1331,12 +1343,11 @@ class SeriesVideoTranscoding(object):
             external_subtitle_info_list
         )
         self._output_video_dir: str = output_video_dir
-        self._output_video_name_template_str: str = (
-            output_video_name_template_str
-        )
+        self._output_video_name_template_str: str = (output_video_name_template_str)
         self._cache_dir: str = cache_dir
         self._episode_list: list = copy.deepcopy(episode_list)
         self._config: namedtuple = copy.deepcopy(config)
+        self._basic_config: namedtuple = basic_config
 
         if not os.path.isdir(self._cache_dir):
             os.makedirs(self._cache_dir)
@@ -1380,8 +1391,7 @@ class SeriesVideoTranscoding(object):
 
                 if episode in video_info.keys():
                     raise RuntimeError(
-                        f"repetitive episode {episode} "
-                        f"in {self._input_video_dir}"
+                        f"repetitive episode {episode} " f"in {self._input_video_dir}"
                     )
 
                 video_info[episode] = dict(
@@ -1436,17 +1446,11 @@ class SeriesVideoTranscoding(object):
                             else [
                                 0
                                 for i in range(
-                                    len(
-                                        external_subtitle_info[
-                                            "track_index_list"
-                                        ]
-                                    )
+                                    len(external_subtitle_info["track_index_list"])
                                 )
                             ]
                         ),
-                        track_index_list=external_subtitle_info[
-                            "track_index_list"
-                        ],
+                        track_index_list=external_subtitle_info["track_index_list"],
                     )
 
             if not subtitle_info:
@@ -1499,15 +1503,11 @@ class SeriesVideoTranscoding(object):
                             else [
                                 0
                                 for i in range(
-                                    len(
-                                        external_audio_info["track_index_list"]
-                                    )
+                                    len(external_audio_info["track_index_list"])
                                 )
                             ]
                         ),
-                        track_index_list=external_audio_info[
-                            "track_index_list"
-                        ],
+                        track_index_list=external_audio_info["track_index_list"],
                     )
 
             if not audio_info:
@@ -1553,8 +1553,7 @@ class SeriesVideoTranscoding(object):
 
                     chapter_info[episode] = dict(
                         filepath=os.path.join(
-                            self._config.external_chapter_info["chapter_dir"],
-                            filename,
+                            self._config.external_chapter_info["chapter_dir"], filename,
                         )
                     )
 
@@ -1718,9 +1717,7 @@ class SeriesVideoTranscoding(object):
                 warnings.warn(warning_str, RuntimeWarning)
         for episode in self._episode_list:
             if str(episode) not in video_info.keys():
-                raise ValueError(
-                    f"video of episode: {episode} does NOT existed!"
-                )
+                raise ValueError(f"video of episode: {episode} does NOT existed!")
         video_filename_list: list = [
             os.path.basename(one_video_info["filepath"])
             for one_video_info in video_info.values()
@@ -1736,8 +1733,7 @@ class SeriesVideoTranscoding(object):
                 for one_subtitle_info in subtitle_info.values()
             ]
             transcode_series_subtitle_debug_str: str = (
-                f"transcode series:"
-                f"subtitles {index}:{subtitle_filename_list}"
+                f"transcode series:" f"subtitles {index}:{subtitle_filename_list}"
             )
             g_logger.log(logging.DEBUG, transcode_series_subtitle_debug_str)
 
@@ -1777,13 +1773,10 @@ class SeriesVideoTranscoding(object):
             transcode_series_hardcoded_subtitle_debug_str: str = (
                 f"transcode series: hardcoded_subtitles:{hardcoded_subtitle_filename_list}"
             )
-            g_logger.log(
-                logging.DEBUG, transcode_series_hardcoded_subtitle_debug_str
-            )
+            g_logger.log(logging.DEBUG, transcode_series_hardcoded_subtitle_debug_str)
 
         start_info_str: str = (
-            f"transcode series: starting transcoding "
-            f"{self._input_video_dir}"
+            f"transcode series: starting transcoding " f"{self._input_video_dir}"
         )
         print(start_info_str, file=sys.stderr)
         g_logger.log(logging.INFO, start_info_str)
@@ -1791,9 +1784,7 @@ class SeriesVideoTranscoding(object):
             episode: str = str(int(episode_num))
             video_filepath: str = video_info[episode]["filepath"]
             output_video_filename: str = (
-                self._output_video_name_template_str.format(
-                    episode=episode_num
-                )
+                self._output_video_name_template_str.format(episode=episode_num)
             )
 
             config: dict = self._config._asdict()
@@ -1808,9 +1799,7 @@ class SeriesVideoTranscoding(object):
                     title=subtitle_info[episode]["title"],
                     language=subtitle_info[episode]["language"],
                     delay_ms=subtitle_info[episode]["delay_ms"],
-                    track_index_list=subtitle_info[episode][
-                        "track_index_list"
-                    ],
+                    track_index_list=subtitle_info[episode]["track_index_list"],
                 )
                 for subtitle_info in subtitle_info_list
                 if episode in subtitle_info.keys()
@@ -1845,8 +1834,7 @@ class SeriesVideoTranscoding(object):
             config: namedtuple = Config(**config)
 
             start_info_str: str = (
-                f"transcode series: starting "
-                f"transcoding episode {episode_num}"
+                f"transcode series: starting " f"transcoding episode {episode_num}"
             )
             print(start_info_str, file=sys.stderr)
             g_logger.log(logging.INFO, start_info_str)
@@ -1857,10 +1845,9 @@ class SeriesVideoTranscoding(object):
                 output_video_name=output_video_filename,
                 cache_dir=self._cache_dir,
                 config=copy.deepcopy(config),
+                basic_config=self._basic_config,
             )
-            output_video_filepath: str = (
-                current_episode_transcoding.transcode()
-            )
+            output_video_filepath: str = (current_episode_transcoding.transcode())
 
             end_info_str: str = (
                 f"transcode series: "
@@ -1899,16 +1886,27 @@ def hardcoded_subtitle_check(
         )
 
 
-def config_pre_check(
+def basic_config_pre_check(basic_config: dict):
+    constant = global_constant()
+    delete_cache_file_bool_key: str = constant.delete_cache_file_bool_config_key
+    if delete_cache_file_bool_key not in basic_config.keys():
+        raise KeyError(
+            f"{delete_cache_file_bool_key} can not be found " f"in basic_config"
+        )
+
+
+def mission_config_pre_check(
     one_mission_config: dict,
     all_output_filepath_set: set,
     global_config_dict: dict,
+    config_index: int,
 ):
+    config_number: int = config_index + 1
+
     config: dict = one_mission_config
     if config["type"] == "single":
         if not os.path.isfile(config["input_video_filepath"]) and all(
-            os.path.abspath(config["input_video_filepath"])
-            != os.path.abspath(filepath)
+            os.path.abspath(config["input_video_filepath"]) != os.path.abspath(filepath)
             for filepath in all_output_filepath_set
         ):
             raise ValueError(
@@ -1925,9 +1923,7 @@ def config_pre_check(
                 )
             convert_codec_2_uft8bom(external_subtitle_info["filepath"])
             if isinstance(external_subtitle_info["language"], str):
-                if not is_available_language(
-                    external_subtitle_info["language"]
-                ):
+                if not is_available_language(external_subtitle_info["language"]):
                     raise ValueError(
                         f"language of external subtitle: "
                         f"{external_subtitle_info['language']} "
@@ -1985,34 +1981,26 @@ def config_pre_check(
                 )
 
         if config["hardcoded_subtitle_info"]["filepath"]:
-            if not os.path.isfile(
-                config["hardcoded_subtitle_info"]["filepath"]
-            ):
+            if not os.path.isfile(config["hardcoded_subtitle_info"]["filepath"]):
                 raise ValueError(
                     f"filepath of hardcoded subtitle: "
                     f"{config['hardcoded_subtitle_info']['filepath']} "
                     f"is not a file."
                 )
 
-            convert_codec_2_uft8bom(
-                config["hardcoded_subtitle_info"]["filepath"]
-            )
+            convert_codec_2_uft8bom(config["hardcoded_subtitle_info"]["filepath"])
 
             hardcoded_subtitle_check(
                 config["hardcoded_subtitle_info"]["filepath"],
                 subtitle_allowable_missing_glyph_char_set=set(
-                    global_config_dict[
-                        "subtitle_allowable_missing_glyph_char_list"
-                    ]
+                    global_config_dict["subtitle_allowable_missing_glyph_char_list"]
                 ),
             )
 
     elif config["type"] == "series":
         if not os.path.isdir(config["input_video_dir"]):
             raise ValueError(
-                f"input video dir: "
-                f"{config['input_video_dir']} "
-                f"is not a dir."
+                f"input video dir: " f"{config['input_video_dir']} " f"is not a dir."
             )
 
         if not any(
@@ -2033,12 +2021,8 @@ def config_pre_check(
                     f"is not a dir."
                 )
             if not any(
-                re.search(
-                    external_subtitle_info["subtitle_filename_reexp"], filename
-                )
-                for filename in os.listdir(
-                    external_subtitle_info["subtitle_dir"]
-                )
+                re.search(external_subtitle_info["subtitle_filename_reexp"], filename)
+                for filename in os.listdir(external_subtitle_info["subtitle_dir"])
             ):
                 raise ValueError(
                     f"subtitle filename reexp of external subtitle: "
@@ -2052,15 +2036,11 @@ def config_pre_check(
                     external_subtitle_info["subtitle_filename_reexp"], filename
                 ):
                     convert_codec_2_uft8bom(
-                        os.path.join(
-                            external_subtitle_info["subtitle_dir"], filename
-                        )
+                        os.path.join(external_subtitle_info["subtitle_dir"], filename)
                     )
 
             if isinstance(external_subtitle_info["language"], str):
-                if not is_available_language(
-                    external_subtitle_info["language"]
-                ):
+                if not is_available_language(external_subtitle_info["language"]):
                     raise ValueError(
                         f"language of external subtitle: "
                         f"{external_subtitle_info['language']} "
@@ -2088,9 +2068,7 @@ def config_pre_check(
                     f"is not a dir."
                 )
             if not any(
-                re.search(
-                    external_audio_info["audio_filename_reexp"], filename
-                )
+                re.search(external_audio_info["audio_filename_reexp"], filename)
                 for filename in os.listdir(external_audio_info["audio_dir"])
             ):
                 raise ValueError(
@@ -2123,9 +2101,7 @@ def config_pre_check(
                 )
 
         if config["external_chapter_info"]["chapter_dir"]:
-            if not os.path.isdir(
-                config["external_chapter_info"]["chapter_dir"]
-            ):
+            if not os.path.isdir(config["external_chapter_info"]["chapter_dir"]):
                 raise ValueError(
                     f"chapter dir: "
                     f"{config['external_chapter_info']['chapter_dir']} "
@@ -2134,8 +2110,7 @@ def config_pre_check(
 
             if not any(
                 re.search(
-                    config["external_chapter_info"]["chapter_filename_reexp"],
-                    filename,
+                    config["external_chapter_info"]["chapter_filename_reexp"], filename,
                 )
                 for filename in os.listdir(
                     config["external_chapter_info"]["chapter_dir"]
@@ -2186,9 +2161,7 @@ def config_pre_check(
                     filename,
                 ):
                     hardcoded_subtitle_filepath: str = os.path.join(
-                        config["hardcoded_subtitle_info"][
-                            "hardcoded_subtitle_dir"
-                        ],
+                        config["hardcoded_subtitle_info"]["hardcoded_subtitle_dir"],
                         filename,
                     )
                     convert_codec_2_uft8bom(hardcoded_subtitle_filepath)
@@ -2211,17 +2184,47 @@ def config_pre_check(
     if config["package_format"] not in available_package_format_set:
         raise RangeError(
             message=(
-                f"{config['package_format']} is not an available "
+                f"{config['package_format']} in config "
+                f"{config_number} is not an available "
                 "package_format"
             ),
             valid_range=str(available_package_format_set),
         )
+    if config["package_format"] == "mp4":
+        if config["external_subtitle_info_list"]:
+            raise ValueError(
+                f"external_subtitle_info_list in config "
+                f"{config_number} is not empty, "
+                f"mp4 container can not package subtitle."
+            )
+        if config["copy_internal_subtitle_bool"]:
+            warning_str: str = (
+                f"pre check: copy_internal_subtitle_bool "
+                f"in config {config_number} is "
+                f"{config['copy_internal_subtitle_bool']}, "
+                f"mp4 container can not package subtitle."
+            )
+            g_logger.log(logging.WARNING, warning_str)
+            warnings.warn(warning_str, RuntimeWarning)
+
+        if config["copy_internal_attachment_bool"]:
+            warning_str: str = (
+                f"pre check: copy_internal_attachment_bool "
+                f"in config {config_number} is "
+                f"{config['copy_internal_attachment_bool']}, "
+                f"mp4 container can not package attachment."
+            )
+            g_logger.log(logging.WARNING, warning_str)
+            warnings.warn(warning_str, RuntimeWarning)
+        if config["external_attachment_filepath_list"]:
+            raise ValueError(
+                f"external_attachment_filepath_list in config "
+                f"{config_number} is not empty, "
+                f"mp4 container can not package attachment."
+            )
 
     available_video_process_option_set: set = constant.available_video_process_option_set
-    if (
-        config["video_process_option"]
-        not in available_video_process_option_set
-    ):
+    if config["video_process_option"] not in available_video_process_option_set:
         raise RangeError(
             message=(
                 f"{config['video_process_option']} is not an available "
@@ -2238,9 +2241,7 @@ def config_pre_check(
     available_frame_server_set: set = constant.available_frame_server_set
     if config["frame_server"] not in available_frame_server_set:
         raise RangeError(
-            message=(
-                f"{config['frame_server']} is not an available " "frame_server"
-            ),
+            message=(f"{config['frame_server']} is not an available " "frame_server"),
             valid_range=str(available_frame_server_set),
         )
 
@@ -2254,8 +2255,7 @@ def config_pre_check(
 
     available_video_transcoding_method_set: set = constant.available_video_transcoding_method_set
     if (
-        config["video_transcoding_method"]
-        not in available_video_transcoding_method_set
+        config["video_transcoding_method"] not in available_video_transcoding_method_set
         and config["video_process_option"] != "copy"
     ):
         raise RangeError(
@@ -2267,10 +2267,7 @@ def config_pre_check(
         )
 
     available_output_frame_rate_mode_set: set = constant.available_output_frame_rate_mode_set
-    if (
-        config["output_frame_rate_mode"]
-        not in available_output_frame_rate_mode_set
-    ):
+    if config["output_frame_rate_mode"] not in available_output_frame_rate_mode_set:
         raise RangeError(
             message=(
                 f"{config['output_frame_rate_mode']} is not an available "
@@ -2349,10 +2346,7 @@ def config_pre_check(
             )
 
     available_subtitle_prior_option_set: set = constant.available_subtitle_prior_option_set
-    if (
-        config["subtitle_prior_option"]
-        not in available_subtitle_prior_option_set
-    ):
+    if config["subtitle_prior_option"] not in available_subtitle_prior_option_set:
         raise RangeError(
             message=(
                 f"{config['subtitle_prior_option']} is not an available "
@@ -2370,9 +2364,7 @@ def config_pre_check(
 
     for filepath in config["external_attachment_filepath_list"]:
         if not os.path.isfile(filepath):
-            raise ValueError(
-                f"external_attachment_filepath: {filepath} is not a file."
-            )
+            raise ValueError(f"external_attachment_filepath: {filepath} is not a file.")
 
 
 def get_output_filepath_set(one_mission_config: dict):
@@ -2387,9 +2379,9 @@ def get_output_filepath_set(one_mission_config: dict):
         )
     elif config["type"] == "series":
         for episode in config["episode_list"]:
-            output_video_name: str = config[
-                "output_video_name_template_str"
-            ].format(episode=episode) + "." + config["package_format"]
+            output_video_name: str = config["output_video_name_template_str"].format(
+                episode=episode
+            ) + "." + config["package_format"]
 
             output_filepath_set.add(
                 os.path.join(config["output_video_dir"], output_video_name)
@@ -2398,33 +2390,31 @@ def get_output_filepath_set(one_mission_config: dict):
 
 
 def transcode_all_missions(
-    config_json_filepath: str,
-    param_template_json_filepath: str,
-    global_config_json_filepath: str,
+    config_filepath: str, param_template_filepath: str, global_config_filepath: str,
 ):
-    if not os.path.isfile(config_json_filepath):
+    if not os.path.isfile(config_filepath):
         raise FileNotFoundError(
-            f"input json file cannot be found with {config_json_filepath}"
+            f"input config file cannot be found with {config_filepath}"
         )
 
-    if not os.path.isfile(param_template_json_filepath):
+    if not os.path.isfile(param_template_filepath):
         raise FileNotFoundError(
-            f"input json file cannot be found with "
-            f"{param_template_json_filepath}"
+            f"input config file cannot be found with " f"{param_template_filepath}"
         )
 
-    if not os.path.isfile(global_config_json_filepath):
+    if not os.path.isfile(global_config_filepath):
         raise FileNotFoundError(
-            f"input json file cannot be found with "
-            f"{global_config_json_filepath}"
+            f"input config file cannot be found with " f"{global_config_filepath}"
         )
 
-    config_dict: dict = load_config(config_json_filepath)
-    param_template_dict: dict = load_config(param_template_json_filepath)
-    global_config_dict: dict = load_config(global_config_json_filepath)
+    config_dict: dict = load_config(config_filepath)
+    param_template_dict: dict = load_config(param_template_filepath)
+    global_config_dict: dict = load_config(global_config_filepath)
 
     param_template_key_set: set = set(param_template_dict.keys())
     basic_config_dict: dict = config_dict["basic_config"]
+
+    basic_config_pre_check(basic_config_dict)
 
     main_logger = get_logger(basic_config_dict["log_config_filepath"])
 
@@ -2436,16 +2426,17 @@ def transcode_all_missions(
 
     time.sleep(basic_config_dict["delay_start_sec"])
 
+    Config: namedtuple = namedtuple("Config", sorted(basic_config_dict))
+    basic_config: namedtuple = Config(**basic_config_dict)
+
     all_mission_config_list: list = config_dict["all_mission_config"]
     all_output_filepath_set: set = set()
     new_all_mission_config_list: list = []
-    for mission_config in all_mission_config_list:
+    for mission_config_index, mission_config in enumerate(all_mission_config_list):
         mission_config["general_config"] = dict(
             dict(
                 cache_dir=mission_config["general_config"]["cache_dir"],
-                package_format=mission_config["general_config"][
-                    "package_format"
-                ],
+                package_format=mission_config["general_config"]["package_format"],
                 thread_bool=mission_config["general_config"]["thread_bool"],
             ),
             **mission_config["general_config"]["video_related_config"],
@@ -2460,10 +2451,11 @@ def transcode_all_missions(
             **mission_config["general_config"],
         )
 
-        config_pre_check(
+        mission_config_pre_check(
             mission_config,
             all_output_filepath_set=all_output_filepath_set,
             global_config_dict=global_config_dict,
+            config_index=mission_config_index,
         )
 
         episode_list_re_exp: str = "(\\d+)~(\\d+)"
@@ -2471,9 +2463,7 @@ def transcode_all_missions(
             if key == "episode_list" and isinstance(mission_config[key], str):
                 re_result = re.search(episode_list_re_exp, mission_config[key])
                 if not re_result:
-                    raise ValueError(
-                        "format of episode_list str is inaccurate."
-                    )
+                    raise ValueError("format of episode_list str is inaccurate.")
                 first_episode: int = int(re_result.group(1))
                 last_episode: int = int(re_result.group(2))
                 step: int = 1
@@ -2481,9 +2471,7 @@ def transcode_all_missions(
                     step = -1
                 mission_config[key] = [
                     episode
-                    for episode in range(
-                        first_episode, last_episode + step, step
-                    )
+                    for episode in range(first_episode, last_episode + step, step)
                 ]
                 continue
             if (
@@ -2491,9 +2479,7 @@ def transcode_all_missions(
                 and mission_config[key]
                 and isinstance(mission_config[key], str)
             ):
-                mission_config[key] = param_template_dict[key][
-                    mission_config[key]
-                ]
+                mission_config[key] = param_template_dict[key][mission_config[key]]
 
         all_output_filepath_set |= get_output_filepath_set(mission_config)
 
@@ -2502,48 +2488,40 @@ def transcode_all_missions(
                 for index in range(
                     len(mission_config["segmented_transcode_config"][episode])
                 ):
-                    for key in mission_config["segmented_transcode_config"][
-                        episode
-                    ][index].keys():
+                    for key in mission_config["segmented_transcode_config"][episode][
+                        index
+                    ].keys():
                         if key in param_template_key_set and isinstance(
-                            mission_config["segmented_transcode_config"][
-                                episode
-                            ][index][key],
+                            mission_config["segmented_transcode_config"][episode][
+                                index
+                            ][key],
                             str,
                         ):
-                            mission_config["segmented_transcode_config"][
-                                episode
-                            ][index][key] = param_template_dict[key][
-                                mission_config["segmented_transcode_config"][
-                                    episode
-                                ][index][key]
+                            mission_config["segmented_transcode_config"][episode][
+                                index
+                            ][key] = param_template_dict[key][
+                                mission_config["segmented_transcode_config"][episode][
+                                    index
+                                ][key]
                             ]
         elif mission_config["type"] == "single":
-            for index in range(
-                len(mission_config["segmented_transcode_config_list"])
-            ):
-                for key in mission_config["segmented_transcode_config_list"][
-                    index
-                ]:
+            for index in range(len(mission_config["segmented_transcode_config_list"])):
+                for key in mission_config["segmented_transcode_config_list"][index]:
                     if key in param_template_key_set and isinstance(
-                        mission_config["segmented_transcode_config_list"][
-                            index
-                        ][key],
+                        mission_config["segmented_transcode_config_list"][index][key],
                         str,
                     ):
-                        mission_config["segmented_transcode_config_list"][
-                            index
-                        ][key] = param_template_dict[key][
-                            mission_config["segmented_transcode_config_list"][
-                                index
-                            ][key]
+                        mission_config["segmented_transcode_config_list"][index][
+                            key
+                        ] = param_template_dict[key][
+                            mission_config["segmented_transcode_config_list"][index][
+                                key
+                            ]
                         ]
 
         if not is_printable(mission_config["cache_dir"]):
             old_cache_dir = mission_config["cache_dir"]
-            mission_config["cache_dir"] = get_printable(
-                mission_config["cache_dir"]
-            )
+            mission_config["cache_dir"] = get_printable(mission_config["cache_dir"])
             warning_str: str = (
                 f"pre-check: there is unprintable char in "
                 f"cache_dir: {old_cache_dir} ,"
@@ -2568,6 +2546,7 @@ def transcode_all_missions(
                 cache_dir=mission_config.cache_dir,
                 episode_list=mission_config.episode_list,
                 config=mission_config,
+                basic_config=basic_config,
             )
             series_transcoding_mission.transcode()
 
@@ -2578,6 +2557,7 @@ def transcode_all_missions(
                 output_video_name=mission_config.output_video_name,
                 cache_dir=mission_config.cache_dir,
                 config=mission_config,
+                basic_config=basic_config,
             )
             output_video_filepath: str = single_transcoding_mission.transcode()
 

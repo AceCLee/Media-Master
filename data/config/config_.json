@@ -1,7 +1,8 @@
 {
     "basic_config": {
         "delay_start_sec": 0,
-        "log_config_filepath": "data/log_config/log_config.conf"
+        "log_config_filepath": "data/log_config/log_config.conf",
+        "delete_cache_file_bool": true
     },
     "all_mission_config": [{
         "type": "single",

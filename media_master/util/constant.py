@@ -22,9 +22,15 @@ from .language import all_iso639_code_set
 
 def global_constant():
     constant_dict: dict = dict(
+        valid_file_suffix="_valid",
+        delete_cache_file_bool_config_key="delete_cache_file_bool",
         python_text_codec_dict={"utf_8_bom": "utf-8-sig"},
         vapoursynth_lwlibavsource_cache_file_extension=".lwi",
         all_iso639_code_set=all_iso639_code_set(),
+        available_config_format_set={"json", "yaml", "hocon"},
+        available_config_format_extension_dict=dict(
+            json={".json"}, yaml={".yaml", ".yml"}, hocon={".conf", ".hocon"}
+        ),
         available_package_format_set={"mkv", "mp4"},
         available_video_process_option_set={"copy", "transcode"},
         available_frame_server_set={"vspipe", ""},

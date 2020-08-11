@@ -40,7 +40,7 @@ class Track(object):
 
 
 class RepeatableTrack(Track):
-    
+
     def __init__(
         self,
         track_index: int,
@@ -194,7 +194,7 @@ class MenuTrack(Track):
 
 
 class VideoTrack(RepeatableTrack):
-    
+
     def __init__(
         self,
         track_index: int,
@@ -432,7 +432,7 @@ class VideoTrack(RepeatableTrack):
 
 
 class AudioTrack(RepeatableTrack):
-    
+
     def __init__(
         self,
         track_index: int,
@@ -475,7 +475,7 @@ class AudioTrack(RepeatableTrack):
 
 
 class TextTrack(RepeatableTrack):
-    
+
     def __init__(
         self,
         track_index: int,
@@ -505,7 +505,7 @@ class TextTrack(RepeatableTrack):
 
 
 class IntermediateFile(object):
-    
+
     def __init__(self, filepath: str):
         if not isinstance(filepath, str):
             raise TypeError(

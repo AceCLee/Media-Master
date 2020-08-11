@@ -19,7 +19,7 @@
 import hashlib
 
 
-def hash_name(string: str, output_size_in_byte=3):
+def hash_name(string: str, output_size_in_byte=3) -> str:
     blake_hash = hashlib.blake2b(
         string.encode("utf-8"), digest_size=output_size_in_byte
     )

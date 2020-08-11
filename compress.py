@@ -22,18 +22,14 @@ from media_master import transcode_all_missions
 # type cmdline to run this script
 
 if __name__ == "__main__":
-    config_json_filepath: str = os.path.join(
-        os.getcwd(), "data/config/config.json"
-    )
-    param_template_json_filepath: str = os.path.join(
+    config_filepath: str = os.path.join(os.getcwd(), "data/config/config.json")
+    param_template_filepath: str = os.path.join(
         os.getcwd(), "data/config/param_template.json"
     )
-    global_config_json_filepath: str = os.path.join(
+    global_config_filepath: str = os.path.join(
         os.getcwd(), "data/config/global_config.json"
     )
 
     transcode_all_missions(
-        config_json_filepath,
-        param_template_json_filepath,
-        global_config_json_filepath,
+        config_filepath, param_template_filepath, global_config_filepath
     )

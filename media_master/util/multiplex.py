@@ -25,6 +25,11 @@ from ..error import DirNotFoundError, RangeError
 from .check import check_file_environ_path
 from .constant import global_constant
 from pymediainfo import MediaInfo
+from .string_util import (
+    get_unique_printable_filename,
+    is_filename_with_valid_mark,
+    get_filename_with_valid_mark,
+)
 
 import copy
 
@@ -38,6 +43,7 @@ def remultiplex_ffmpeg(
     output_file_dir: str,
     output_file_name: str,
     output_file_extension: str,
+    add_valid_mark_bool: bool = False,
     ffmpeg_exe_file_dir="",
 ) -> str:
     if not isinstance(output_file_dir, str):
@@ -73,25 +79,40 @@ def remultiplex_ffmpeg(
         all_filename_list: list = os.listdir(ffmpeg_exe_file_dir)
         if ffmpeg_exe_filename not in all_filename_list:
             raise FileNotFoundError(
-                f"{ffmpeg_exe_filename} cannot be found in "
-                f"{ffmpeg_exe_file_dir}"
+                f"{ffmpeg_exe_filename} cannot be found in " f"{ffmpeg_exe_file_dir}"
             )
     else:
         if not check_file_environ_path({ffmpeg_exe_filename}):
             raise FileNotFoundError(
-                f"{ffmpeg_exe_filename} cannot be found in "
-                f"environment path"
+                f"{ffmpeg_exe_filename} cannot be found in " f"environment path"
             )
     if not os.path.exists(output_file_dir):
         os.makedirs(output_file_dir)
 
-    ffmpeg_exe_filepath: str = os.path.join(
-        ffmpeg_exe_file_dir, ffmpeg_exe_filename
-    )
+    ffmpeg_exe_filepath: str = os.path.join(ffmpeg_exe_file_dir, ffmpeg_exe_filename)
     output_filename_fullname: str = output_file_name + output_file_extension
-    output_filepath: str = os.path.join(
-        output_file_dir, output_filename_fullname
-    )
+    output_filepath: str = os.path.join(output_file_dir, output_filename_fullname)
+
+    if add_valid_mark_bool:
+        valid_output_filename_fullname: str = get_filename_with_valid_mark(
+            output_filename_fullname
+        )
+        valid_output_filepath: str = os.path.join(
+            output_file_dir, valid_output_filename_fullname
+        )
+
+        if os.path.isfile(output_filepath):
+            os.remove(output_filepath)
+
+        if os.path.isfile(valid_output_filepath):
+            skip_info_str: str = (
+                f"multiplex ffmpeg: {valid_output_filepath} "
+                f"already existed, skip multiplexing."
+            )
+
+            print(skip_info_str, file=sys.stderr)
+            g_logger.log(logging.INFO, skip_info_str)
+            return valid_output_filepath
 
     input_key: str = "-i"
     input_value: str = input_filepath
@@ -110,14 +131,11 @@ def remultiplex_ffmpeg(
     ]
 
     ffmpeg_param_debug_str: str = (
-        f"multiplex ffmpeg: param:"
-        f"{subprocess.list2cmdline(cmd_param_list)}"
+        f"multiplex ffmpeg: param:" f"{subprocess.list2cmdline(cmd_param_list)}"
     )
     g_logger.log(logging.DEBUG, ffmpeg_param_debug_str)
 
-    start_info_str: str = (
-        f"multiplex ffmpeg: starting multiplexing {output_filepath}"
-    )
+    start_info_str: str = (f"multiplex ffmpeg: starting multiplexing {output_filepath}")
 
     print(start_info_str, file=sys.stderr)
     g_logger.log(logging.INFO, start_info_str)
@@ -135,12 +153,13 @@ def remultiplex_ffmpeg(
         print(end_info_str, file=sys.stderr)
         g_logger.log(logging.INFO, end_info_str)
     else:
-        error_str = (
-            f"multiplex ffmpeg: "
-            f"multiplex {output_filepath} unsuccessfully."
-        )
+        error_str = f"multiplex ffmpeg: " f"multiplex {output_filepath} unsuccessfully."
         print(error_str, file=sys.stderr)
         raise ChildProcessError(error_str)
+
+    if add_valid_mark_bool:
+        os.rename(output_filepath, valid_output_filepath)
+        output_filepath = valid_output_filepath
 
     return output_filepath
 
@@ -152,6 +171,7 @@ def multiplex_mkv(
     file_title="",
     chapters_filepath="",
     attachments_filepath_set=set(),
+    add_valid_mark_bool: bool = False,
     mkvmerge_exe_file_dir="",
 ) -> str:
     if not isinstance(track_info_list, list):
@@ -210,9 +230,7 @@ def multiplex_mkv(
                 f"filepath of {infor_dict} cannot be found with {filepath}"
             )
     if chapters_filepath and not os.path.isfile(chapters_filepath):
-        raise FileNotFoundError(
-            f"input chapter file cannot be found with {filepath}"
-        )
+        raise FileNotFoundError(f"input chapter file cannot be found with {filepath}")
     if attachments_filepath_set:
         for filepath in attachments_filepath_set:
             if not os.path.isfile(filepath):
@@ -235,8 +253,7 @@ def multiplex_mkv(
     else:
         if not check_file_environ_path({mkvmerge_exe_filename}):
             raise FileNotFoundError(
-                f"{mkvmerge_exe_filename} cannot be found in "
-                "environment path"
+                f"{mkvmerge_exe_filename} cannot be found in " "environment path"
             )
 
     for index, track_info_dict in enumerate(track_info_list):
@@ -269,7 +286,7 @@ def multiplex_mkv(
     mediainfo_track_type_dict: dict = {
         constant.mediainfo_video_type: constant.video_type,
         constant.mediainfo_audio_type: constant.audio_type,
-        constant.mediainfo_subtitle_type: constant.video_type,
+        constant.mediainfo_subtitle_type: constant.subtitle_type,
     }
 
     for track_info_dict in track_info_list:
@@ -296,9 +313,9 @@ def multiplex_mkv(
                     track_mediainfo_dict["track_type"]
                 ]
             else:
-                track_info_dict[
+                track_info_dict[selective_key] = selective_key_default_value_dict[
                     selective_key
-                ] = selective_key_default_value_dict[selective_key]
+                ]
 
     available_track_type_set: set = {
         video_track_type,
@@ -313,13 +330,10 @@ def multiplex_mkv(
         track_type: str = infor_dict["track_type"]
         if track_type not in available_track_type_set:
             raise RangeError(
-                message=(
-                    f"value of track_type must in "
-                    f"{available_track_type_set}"
-                ),
+                message=(f"value of track_type must in " f"{available_track_type_set}"),
                 valid_range=str(available_track_type_set),
             )
-    if not os.path.exists(output_file_dir):
+    if not os.path.isdir(output_file_dir):
         os.makedirs(output_file_dir)
 
     mkv_suffix: str = ".mkv"
@@ -327,9 +341,28 @@ def multiplex_mkv(
         mkvmerge_exe_file_dir, mkvmerge_exe_filename
     )
     output_filename_fullname: str = output_file_name + mkv_suffix
-    output_filepath: str = os.path.join(
-        output_file_dir, output_filename_fullname
-    )
+    output_filepath: str = os.path.join(output_file_dir, output_filename_fullname)
+
+    if add_valid_mark_bool:
+        valid_output_filename_fullname: str = get_filename_with_valid_mark(
+            output_filename_fullname
+        )
+        valid_output_filepath: str = os.path.join(
+            output_file_dir, valid_output_filename_fullname
+        )
+
+        if os.path.isfile(output_filepath):
+            os.remove(output_filepath)
+
+        if os.path.isfile(valid_output_filepath):
+            skip_info_str: str = (
+                f"multiplex mkvmerge: {valid_output_filepath} "
+                f"already existed, skip multiplexing."
+            )
+
+            print(skip_info_str, file=sys.stderr)
+            g_logger.log(logging.INFO, skip_info_str)
+            return valid_output_filepath
     output_key: str = "--output"
     output_value: str = output_filepath
     audio_track_key: str = "--audio-tracks"
@@ -352,13 +385,9 @@ def multiplex_mkv(
     attachment_key: str = "--attach-file"
     verbose_key: str = "--verbose"
 
-    def mkvmerge_option_cmd_list(
-        cmd_key: str, value_format: str, track_id: int, value
-    ):
+    def mkvmerge_option_cmd_list(cmd_key: str, value_format: str, track_id: int, value):
         if value:
-            cmd_value: str = value_format.format(
-                track_id=track_id, value=value
-            )
+            cmd_value: str = value_format.format(track_id=track_id, value=value)
             return [cmd_key, cmd_value]
         else:
             return []
@@ -409,9 +438,7 @@ def multiplex_mkv(
 
             track_cmd_param_list += [track_key, str(track_id)]
 
-            track_cmd_param_list += exclusive_track_type_list(
-                track_type=track_type
-            )
+            track_cmd_param_list += exclusive_track_type_list(track_type=track_type)
 
             track_cmd_param_list += mkvmerge_option_cmd_list(
                 cmd_key=sync_key,
@@ -455,14 +482,11 @@ def multiplex_mkv(
             cmd_param_list += [attachment_key, filepath]
 
     mkvmerge_param_debug_str: str = (
-        f"multiplex mkvmerge: param: "
-        f"{subprocess.list2cmdline(cmd_param_list)}"
+        f"multiplex mkvmerge: param: " f"{subprocess.list2cmdline(cmd_param_list)}"
     )
     g_logger.log(logging.DEBUG, mkvmerge_param_debug_str)
 
-    start_info_str: str = (
-        f"multiplex mkvmerge: start multiplexing {output_filepath}"
-    )
+    start_info_str: str = (f"multiplex mkvmerge: start multiplexing {output_filepath}")
 
     print(start_info_str, file=sys.stderr)
     g_logger.log(logging.INFO, start_info_str)
@@ -484,8 +508,7 @@ def multiplex_mkv(
 
     if return_code == 0:
         end_info_str: str = (
-            f"multiplex mkvmerge: "
-            f"multiplex {output_filepath} successfully."
+            f"multiplex mkvmerge: " f"multiplex {output_filepath} successfully."
         )
         print(end_info_str, file=sys.stderr)
         g_logger.log(logging.INFO, end_info_str)
@@ -506,8 +529,7 @@ def multiplex_mkv(
         g_logger.log(logging.WARNING, warning_str)
     else:
         error_str = (
-            f"multiplex mkvmerge: "
-            f"multiplex {output_filepath} unsuccessfully."
+            f"multiplex mkvmerge: " f"multiplex {output_filepath} unsuccessfully."
         )
         print(error_str, file=sys.stderr)
         raise subprocess.CalledProcessError(
@@ -515,6 +537,10 @@ def multiplex_mkv(
             cmd=subprocess.list2cmdline(cmd_param_list),
             output=stdout_text_str,
         )
+
+    if add_valid_mark_bool:
+        os.rename(output_filepath, valid_output_filepath)
+        output_filepath = valid_output_filepath
 
     return output_filepath
 
@@ -524,6 +550,7 @@ def multiplex_mp4(
     output_file_dir: str,
     output_file_name: str,
     chapters_filepath="",
+    add_valid_mark_bool: bool = False,
     mp4box_exe_file_dir="",
 ) -> str:
     if not isinstance(track_info_list, list):
@@ -576,9 +603,7 @@ def multiplex_mp4(
                 f"filepath of {infor_dict} cannot be found with {filepath}"
             )
     if chapters_filepath and not os.path.isfile(chapters_filepath):
-        raise FileNotFoundError(
-            f"input chapter file cannot be found with {filepath}"
-        )
+        raise FileNotFoundError(f"input chapter file cannot be found with {filepath}")
 
     mp4box_exe_filename: str = "mp4box.exe"
     if mp4box_exe_file_dir:
@@ -589,8 +614,7 @@ def multiplex_mp4(
         all_filename_list: list = os.listdir(mp4box_exe_file_dir)
         if mp4box_exe_filename not in all_filename_list:
             raise FileNotFoundError(
-                f"{mp4box_exe_filename} cannot be found in "
-                f"{mp4box_exe_file_dir}"
+                f"{mp4box_exe_filename} cannot be found in " f"{mp4box_exe_file_dir}"
             )
     else:
         if not check_file_environ_path({mp4box_exe_filename}):
@@ -604,24 +628,84 @@ def multiplex_mp4(
         delay_ms=0, track_name="", language=""
     )
 
+    constant = global_constant()
+
+    video_track_type: str = constant.video_type
+    audio_track_type: str = constant.audio_type
+
+    mediainfo_track_type_dict: dict = {
+        constant.mediainfo_video_type: constant.video_type,
+        constant.mediainfo_audio_type: constant.audio_type,
+        constant.mediainfo_subtitle_type: constant.subtitle_type,
+    }
+
     for track_info_dict in track_info_list:
         for selective_key in selective_key_set:
             if selective_key in track_info_dict.keys():
                 continue
-            track_info_dict[selective_key] = selective_key_default_value_dict[
-                selective_key
-            ]
-    if not os.path.exists(output_file_dir):
+            if selective_key == "track_type":
+                media_info_list: list = MediaInfo.parse(
+                    track_info_dict["filepath"]
+                ).to_data()["tracks"]
+                track_mediainfo_dict: dict = next(
+                    (
+                        track
+                        for track in media_info_list
+                        if constant.mediainfo_track_id_key in track.keys()
+                        and int(track[constant.mediainfo_track_id_key])
+                        == track_info_dict["track_id"]
+                    ),
+                    None,
+                )
+                track_info_dict["track_type"] = mediainfo_track_type_dict[
+                    track_mediainfo_dict["track_type"]
+                ]
+            else:
+                track_info_dict[selective_key] = selective_key_default_value_dict[
+                    selective_key
+                ]
+
+    available_track_type_set: set = {video_track_type, audio_track_type}
+
+    for infor_dict in track_info_list:
+        if track_info_dict["track_id"] == -1:
+            continue
+        key_set: set = set(infor_dict.keys())
+        track_type: str = infor_dict["track_type"]
+        if track_type not in available_track_type_set:
+            raise RangeError(
+                message=(f"value of track_type must in " f"{available_track_type_set}"),
+                valid_range=str(available_track_type_set),
+            )
+    if not os.path.isdir(output_file_dir):
         os.makedirs(output_file_dir)
 
     mp4_extension: str = ".mp4"
-    mp4box_exe_filepath: str = os.path.join(
-        mp4box_exe_file_dir, mp4box_exe_filename
-    )
+    mp4box_exe_filepath: str = os.path.join(mp4box_exe_file_dir, mp4box_exe_filename)
+
     output_filename_fullname: str = output_file_name + mp4_extension
-    output_filepath: str = os.path.join(
-        output_file_dir, output_filename_fullname
-    )
+    output_filepath: str = os.path.join(output_file_dir, output_filename_fullname)
+
+    if add_valid_mark_bool:
+        valid_output_filename_fullname: str = get_filename_with_valid_mark(
+            output_filename_fullname
+        )
+        valid_output_filepath: str = os.path.join(
+            output_file_dir, valid_output_filename_fullname
+        )
+
+        if os.path.isfile(output_filepath):
+            os.remove(output_filepath)
+
+        if os.path.isfile(valid_output_filepath):
+            skip_info_str: str = (
+                f"multiplex mp4box: {valid_output_filepath} "
+                f"already existed, skip multiplexing."
+            )
+
+            print(skip_info_str, file=sys.stderr)
+            g_logger.log(logging.INFO, skip_info_str)
+            return valid_output_filepath
     force_new_file_key: str = "-new"
     output_value: str = os.path.abspath(output_filepath)
     add_key: str = "-add"
@@ -660,15 +744,12 @@ def multiplex_mp4(
         cmd_param_list += ["-chap", f"{chapters_filepath}"]
 
     mp4box_param_debug_str: str = (
-        f"multiplex mp4box: param: "
-        f"{subprocess.list2cmdline(cmd_param_list)}"
+        f"multiplex mp4box: param: " f"{subprocess.list2cmdline(cmd_param_list)}"
     )
     g_logger.log(logging.DEBUG, mp4box_param_debug_str)
     print(mp4box_param_debug_str, file=sys.stderr)
 
-    start_info_str: str = (
-        f"multiplex mp4box: start multiplexing {output_filepath}"
-    )
+    start_info_str: str = (f"multiplex mp4box: start multiplexing {output_filepath}")
 
     print(start_info_str, file=sys.stderr)
     g_logger.log(logging.INFO, start_info_str)
@@ -686,11 +767,12 @@ def multiplex_mp4(
         print(end_info_str, file=sys.stderr)
         g_logger.log(logging.INFO, end_info_str)
     else:
-        error_str = (
-            f"multiplex mp4box: "
-            f"multiplex {output_filepath} unsuccessfully."
-        )
+        error_str = f"multiplex mp4box: " f"multiplex {output_filepath} unsuccessfully."
         raise ChildProcessError(error_str)
+
+    if add_valid_mark_bool:
+        os.rename(output_filepath, valid_output_filepath)
+        output_filepath = valid_output_filepath
 
     return output_filepath
 

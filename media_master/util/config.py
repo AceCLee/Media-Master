@@ -18,26 +18,66 @@
 
 import json
 import os
+from .constant import global_constant
+from ..error import RangeError
+import yaml
+import pyhocon
 
 
-def load_config(config_json_filepath):
-    if not isinstance(config_json_filepath, str):
+def load_config(config_filepath):
+    if not isinstance(config_filepath, str):
         raise TypeError(
-            f"type of config_json_filepath must be str "
-            f"instead of {type(config_json_filepath)}"
+            f"type of config_filepath must be str "
+            f"instead of {type(config_filepath)}"
         )
-    if not os.path.isfile(config_json_filepath):
+    if not os.path.isfile(config_filepath):
         raise FileNotFoundError(
-            f"input config file cannot be found with {config_json_filepath}"
+            f"input config file cannot be found with {config_filepath}"
         )
 
-    config_data_json = {}
-    with open(config_json_filepath, "r", encoding="utf-8") as file:
-        data_str = file.read()
-        assert data_str, "content of {} is empty!".format(config_json_filepath)
-        config_data_json = json.loads(data_str)
+    constant = global_constant()
 
-    return config_data_json
+    available_config_format_set: set = constant.available_config_format_set
+    available_config_format_extension_dict: dict = constant.available_config_format_extension_dict
+    available_config_format_extension_set: set = set()
+    for extension_set in available_config_format_extension_dict.values():
+        available_config_format_extension_set |= extension_set
+
+    config_full_filename: str = os.path.basename(config_filepath)
+    config_filename, config_extension = os.path.splitext(config_full_filename)
+
+    if config_extension not in available_config_format_extension_set:
+        raise RangeError(
+            message=(f"Unknown config_extension: {config_extension}"),
+            valid_range=str(available_config_format_extension_set),
+        )
+
+    config_format: str = ""
+    for current_config_format in available_config_format_set:
+        if (
+            config_extension
+            in available_config_format_extension_dict[current_config_format]
+        ):
+            config_format = current_config_format
+            break
+
+    if not config_format:
+        raise ValueError(f"it is not possible to run this code.")
+
+    config_data_dict: dict = {}
+    with open(config_filepath, "r", encoding="utf-8") as file:
+        if config_format == "json":
+            config_data_dict = json.loads(file.read())
+        elif config_format == "yaml":
+            config_data_dict = yaml.load(file, Loader=yaml.SafeLoader)
+        elif config_format == "hocon":
+            config_data_dict = pyhocon.ConfigFactory.parse_string(
+                file.read()
+            ).as_plain_ordered_dict()
+        else:
+            raise ValueError(f"it is not possible to run this code.")
+
+    return config_data_dict
 
 
 def save_config(config_json_filepath: str, config_dict: dict):

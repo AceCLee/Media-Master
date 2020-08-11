@@ -45,6 +45,11 @@ from .meta_data import (
 from .multiplex import multiplex_mkv
 from .timecode import mkv_timecode_2_standard_timecode
 from .constant import global_constant
+from .string_util import (
+    get_unique_printable_filename,
+    is_filename_with_valid_mark,
+    get_filename_with_valid_mark,
+)
 
 g_logger = logging.getLogger(__name__)
 g_logger.propagate = True
@@ -58,16 +63,13 @@ def split_mediainfo_str2list(string: str) -> list:
 def get_stream_order(streamorder_str: str) -> int:
     if isinstance(streamorder_str, str):
         if "-" in streamorder_str:
-            streamorder_str: str = streamorder_str[
-                streamorder_str.index("-") + 1 :
-            ]
+            streamorder_str: str = streamorder_str[streamorder_str.index("-") + 1 :]
             streamorder: int = int(streamorder_str)
         else:
             streamorder: int = int(streamorder_str)
     else:
         raise RuntimeError(
-            f"Unknown streamorder: {streamorder_str} "
-            f"type:{type(streamorder_str)}"
+            f"Unknown streamorder: {streamorder_str} " f"type:{type(streamorder_str)}"
         )
     return streamorder
 
@@ -83,8 +85,7 @@ def extract_track_ffmpeg(
 ) -> str:
     if not isinstance(input_filepath, str):
         raise TypeError(
-            f"type of input_filepath must be str "
-            f"instead of {type(input_filepath)}"
+            f"type of input_filepath must be str " f"instead of {type(input_filepath)}"
         )
 
     if not isinstance(output_file_dir, str):
@@ -129,14 +130,12 @@ def extract_track_ffmpeg(
         all_filename_list: list = os.listdir(ffmpeg_exe_file_dir)
         if ffmpeg_exe_filename not in all_filename_list:
             raise FileNotFoundError(
-                f"{ffmpeg_exe_filename} cannot be found in "
-                f"{ffmpeg_exe_file_dir}"
+                f"{ffmpeg_exe_filename} cannot be found in " f"{ffmpeg_exe_file_dir}"
             )
     else:
         if not check_file_environ_path({ffmpeg_exe_filename}):
             raise FileNotFoundError(
-                f"{ffmpeg_exe_filename} cannot be found in "
-                f"environment path"
+                f"{ffmpeg_exe_filename} cannot be found in " f"environment path"
             )
 
     video_type: str = "video"
@@ -153,26 +152,33 @@ def extract_track_ffmpeg(
 
     track_suffix: str = output_file_suffix.replace(".", "")
 
-    output_file_fullname: str = (
-        f"{output_file_name}_"
-        f"{track_type}_index_{stream_identifier}.{track_suffix}"
+    output_filename_fullname: str = (
+        f"{output_file_name}_" f"{track_type}_index_{stream_identifier}.{track_suffix}"
     )
 
-    output_filepath: str = os.path.join(output_file_dir, output_file_fullname)
+    output_filepath: str = os.path.join(output_file_dir, output_filename_fullname)
+
+    valid_output_filename_fullname: str = get_filename_with_valid_mark(
+        output_filename_fullname
+    )
+    valid_output_filepath: str = os.path.join(
+        output_file_dir, valid_output_filename_fullname
+    )
 
     if os.path.isfile(output_filepath):
+        os.remove(output_filepath)
+
+    if os.path.isfile(valid_output_filepath):
         skip_info_str: str = (
-            f"extraction ffmpeg: {output_filepath} "
+            f"extraction ffmpeg: {valid_output_filepath} "
             f"already existed, skip extraction."
         )
 
         print(skip_info_str, file=sys.stderr)
         g_logger.log(logging.INFO, skip_info_str)
-        return output_filepath
+        return valid_output_filepath
 
-    ffmpeg_exe_filepath: str = os.path.join(
-        ffmpeg_exe_file_dir, ffmpeg_exe_filename
-    )
+    ffmpeg_exe_filepath: str = os.path.join(ffmpeg_exe_file_dir, ffmpeg_exe_filename)
     input_key: str = "-i"
     input_value: str = input_filepath
     overwrite_key: str = "-y"
@@ -229,9 +235,7 @@ def extract_track_ffmpeg(
     )
     g_logger.log(logging.DEBUG, ffmpeg_param_debug_str)
 
-    start_info_str: str = (
-        f"extraction ffmpeg: starting extracting {output_filepath}"
-    )
+    start_info_str: str = (f"extraction ffmpeg: starting extracting {output_filepath}")
 
     print(start_info_str, file=sys.stderr)
     g_logger.log(logging.INFO, start_info_str)
@@ -251,6 +255,8 @@ def extract_track_ffmpeg(
         raise ChildProcessError(
             f"extraction ffmpeg: extract {output_filepath} unsuccessfully."
         )
+    os.rename(output_filepath, valid_output_filepath)
+    output_filepath = valid_output_filepath
 
     return output_filepath
 
@@ -267,8 +273,7 @@ def extract_track_mkvextract(
 ) -> str:
     if not isinstance(input_filepath, str):
         raise TypeError(
-            f"type of input_filepath must be str "
-            f"instead of {type(input_filepath)}"
+            f"type of input_filepath must be str " f"instead of {type(input_filepath)}"
         )
 
     if not isinstance(output_file_dir, str):
@@ -290,14 +295,11 @@ def extract_track_mkvextract(
         )
 
     if not isinstance(track_type, str):
-        raise TypeError(
-            f"type of track_type must be str instead of {type(track_type)}"
-        )
+        raise TypeError(f"type of track_type must be str instead of {type(track_type)}")
 
     if not isinstance(track_index, int):
         raise TypeError(
-            f"type of track_index must be int "
-            f"instead of {type(track_index)}"
+            f"type of track_index must be int " f"instead of {type(track_index)}"
         )
 
     if not isinstance(mkvextract_exe_file_dir, str):
@@ -322,8 +324,7 @@ def extract_track_mkvextract(
     if mkvextract_exe_file_dir:
         if not os.path.isdir(mkvextract_exe_file_dir):
             raise DirNotFoundError(
-                f"mkvextract dir cannot be found with "
-                f"{mkvextract_exe_file_dir}"
+                f"mkvextract dir cannot be found with " f"{mkvextract_exe_file_dir}"
             )
         all_filename_list: list = os.listdir(mkvextract_exe_file_dir)
         if mkvextract_exe_filename not in all_filename_list:
@@ -334,8 +335,7 @@ def extract_track_mkvextract(
     else:
         if not check_file_environ_path({mkvextract_exe_filename}):
             raise FileNotFoundError(
-                f"{mkvextract_exe_filename} cannot be found in "
-                f"environment path"
+                f"{mkvextract_exe_filename} cannot be found in " f"environment path"
             )
 
     video_type: str = "video"
@@ -380,23 +380,33 @@ def extract_track_mkvextract(
     track_suffix: str = output_file_suffix.replace(".", "")
 
     if disable_filename_index_bool:
-        output_file_fullname: str = f"{output_file_name}.{track_suffix}"
+        output_filename_fullname: str = f"{output_file_name}.{track_suffix}"
     else:
-        output_file_fullname: str = (
+        output_filename_fullname: str = (
             f"{output_file_name}_index_{track_index}.{track_suffix}"
         )
 
-    output_filepath: str = os.path.join(output_file_dir, output_file_fullname)
+    output_filepath: str = os.path.join(output_file_dir, output_filename_fullname)
+
+    valid_output_filename_fullname: str = get_filename_with_valid_mark(
+        output_filename_fullname
+    )
+    valid_output_filepath: str = os.path.join(
+        output_file_dir, valid_output_filename_fullname
+    )
 
     if os.path.isfile(output_filepath):
+        os.remove(output_filepath)
+
+    if os.path.isfile(valid_output_filepath):
         skip_info_str: str = (
-            f"extraction mkvextract: {output_filepath} "
+            f"extraction mkvextract: {valid_output_filepath} "
             f"already existed, skip extraction."
         )
 
         print(skip_info_str, file=sys.stderr)
         g_logger.log(logging.INFO, skip_info_str)
-        return output_filepath
+        return valid_output_filepath
 
     mkvextract_exe_filepath: str = os.path.join(
         mkvextract_exe_file_dir, mkvextract_exe_filename
@@ -421,8 +431,7 @@ def extract_track_mkvextract(
     ]
 
     mkvextract_param_debug_str: str = (
-        f"multiplex mkvextract: param:"
-        f"{subprocess.list2cmdline(cmd_param_list)}"
+        f"multiplex mkvextract: param: {subprocess.list2cmdline(cmd_param_list)}"
     )
     g_logger.log(logging.DEBUG, mkvextract_param_debug_str)
 
@@ -451,8 +460,7 @@ def extract_track_mkvextract(
 
     if return_code == 0:
         end_info_str: str = (
-            f"extraction mkvextract: "
-            f"extract {output_filepath} successfully."
+            f"extraction mkvextract: " f"extract {output_filepath} successfully."
         )
         print(end_info_str, file=sys.stderr)
         g_logger.log(logging.INFO, end_info_str)
@@ -473,8 +481,7 @@ def extract_track_mkvextract(
         g_logger.log(logging.WARNING, warning_str)
     else:
         error_str = (
-            f"extraction mkvextract: "
-            f"extract {output_filepath} unsuccessfully."
+            f"extraction mkvextract: " f"extract {output_filepath} unsuccessfully."
         )
         print(error_str, file=sys.stderr)
         raise subprocess.CalledProcessError(
@@ -482,20 +489,19 @@ def extract_track_mkvextract(
             cmd=subprocess.list2cmdline(cmd_param_list),
             output=stdout_text_str,
         )
+    os.rename(output_filepath, valid_output_filepath)
+    output_filepath = valid_output_filepath
 
     return output_filepath
 
 
-def extract_mkv_video_timecode(
-    filepath: str, output_dir: str, output_name: str
-) -> str:
+def extract_mkv_video_timecode(filepath: str, output_dir: str, output_name: str) -> str:
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
     timecode_suffix: str = "txt"
     media_info_list: list = MediaInfo.parse(filepath).to_data()["tracks"]
     video_info_dict: dict = next(
-        (track for track in media_info_list if track["track_type"] == "Video"),
-        None,
+        (track for track in media_info_list if track["track_type"] == "Video"), None,
     )
     video_sream_order: int = int(video_info_dict["streamorder"])
     output_filepath: str = extract_track_mkvextract(
@@ -521,8 +527,7 @@ def extract_all_subtitles(
 ) -> list:
     if not isinstance(input_filepath, str):
         raise TypeError(
-            f"type of input_filepath must be str "
-            f"instead of {type(input_filepath)}"
+            f"type of input_filepath must be str " f"instead of {type(input_filepath)}"
         )
 
     if not isinstance(output_file_dir, str):
@@ -553,8 +558,7 @@ def extract_all_subtitles(
     if mkvextract_exe_file_dir:
         if not os.path.isdir(mkvextract_exe_file_dir):
             raise DirNotFoundError(
-                f"mkvextract dir cannot be found with "
-                f"{mkvextract_exe_file_dir}"
+                f"mkvextract dir cannot be found with " f"{mkvextract_exe_file_dir}"
             )
         all_filename_list: list = os.listdir(mkvextract_exe_file_dir)
         if mkvextract_exe_filename not in all_filename_list:
@@ -565,8 +569,7 @@ def extract_all_subtitles(
     else:
         if not check_file_environ_path({mkvextract_exe_filename}):
             raise FileNotFoundError(
-                f"{mkvextract_exe_filename} cannot be found in "
-                f"environment path"
+                f"{mkvextract_exe_filename} cannot be found in " f"environment path"
             )
 
     if not isinstance(ffmpeg_exe_file_dir, str):
@@ -588,23 +591,19 @@ def extract_all_subtitles(
         all_filename_list: list = os.listdir(ffmpeg_exe_file_dir)
         if ffmpeg_exe_filename not in all_filename_list:
             raise FileNotFoundError(
-                f"{ffmpeg_exe_filename} cannot be found in "
-                f"{ffmpeg_exe_file_dir}"
+                f"{ffmpeg_exe_filename} cannot be found in " f"{ffmpeg_exe_file_dir}"
             )
     else:
         if not check_file_environ_path({ffmpeg_exe_filename}):
             raise FileNotFoundError(
-                f"{ffmpeg_exe_filename} cannot be found in "
-                f"environment path"
+                f"{ffmpeg_exe_filename} cannot be found in " f"environment path"
             )
     if not os.path.isdir(output_file_dir):
         os.makedirs(output_file_dir)
 
     media_info_list: list = MediaInfo.parse(input_filepath).to_data()["tracks"]
     text_info_list: list = [
-        track
-        for track in media_info_list
-        if track["track_type"].lower() == "text"
+        track for track in media_info_list if track["track_type"].lower() == "text"
     ]
     if not text_info_list:
         return tuple()
@@ -624,10 +623,7 @@ def extract_all_subtitles(
 
         output_filename: str = (f"{output_file_name}_index_{track_index}")
 
-        if any(
-            input_filepath.endswith(mkv_suffix)
-            for mkv_suffix in mkv_suffix_set
-        ):
+        if any(input_filepath.endswith(mkv_suffix) for mkv_suffix in mkv_suffix_set):
 
             output_filepath: str = extract_track_mkvextract(
                 input_filepath=input_filepath,
@@ -664,22 +660,16 @@ def extract_all_subtitles(
             stream_size_byte=int(text_info_dict["stream_size"])
             if "stream_size" in text_info_dict
             else -1,
-            title=text_info_dict["title"]
-            if "title" in text_info_dict.keys()
-            else "",
+            title=text_info_dict["title"] if "title" in text_info_dict.keys() else "",
             language=text_info_dict["language"]
             if "language" in text_info_dict.keys()
             else "",
             default_bool=False
             if "default" not in text_info_dict.keys()
-            else (
-                True if text_info_dict["default"].lower() == "yes" else False
-            ),
+            else (True if text_info_dict["default"].lower() == "yes" else False),
             forced_bool=False
             if "default" not in text_info_dict.keys()
-            else (
-                True if text_info_dict["forced"].lower() == "yes" else False
-            ),
+            else (True if text_info_dict["forced"].lower() == "yes" else False),
         )
         text_track_file_list.append(text_track_file)
 
@@ -691,8 +681,7 @@ def extract_all_attachments(
 ) -> tuple:
     if not isinstance(input_filepath, str):
         raise TypeError(
-            f"type of input_filepath must be str "
-            f"instead of {type(input_filepath)}"
+            f"type of input_filepath must be str " f"instead of {type(input_filepath)}"
         )
 
     if not isinstance(output_file_dir, str):
@@ -733,20 +722,14 @@ def extract_all_attachments(
     else:
         if not check_file_environ_path({mkvextract_exe_filename}):
             raise FileNotFoundError(
-                f"{mkvextract_exe_filename} cannot be found in "
-                f"environment path"
+                f"{mkvextract_exe_filename} cannot be found in " f"environment path"
             )
     if not os.path.isdir(output_file_dir):
         os.makedirs(output_file_dir)
 
     media_info_list: list = MediaInfo.parse(input_filepath).to_data()["tracks"]
     general_info_dict: dict = next(
-        (
-            track
-            for track in media_info_list
-            if track["track_type"] == "General"
-        ),
-        None,
+        (track for track in media_info_list if track["track_type"] == "General"), None,
     )
 
     attachment_key: str = "attachments"
@@ -758,8 +741,7 @@ def extract_all_attachments(
     )
 
     output_attachment_filepath_list: list = [
-        os.path.join(output_file_dir, filename)
-        for filename in attachment_filename_list
+        os.path.join(output_file_dir, filename) for filename in attachment_filename_list
     ]
 
     mkvextract_exe_filepath: str = os.path.join(
@@ -860,8 +842,7 @@ def extract_chapter(
 ) -> MenuTrackFile:
     if not isinstance(input_filepath, str):
         raise TypeError(
-            f"type of input_filepath must be str "
-            f"instead of {type(input_filepath)}"
+            f"type of input_filepath must be str " f"instead of {type(input_filepath)}"
         )
 
     if not isinstance(output_file_dir, str):
@@ -911,8 +892,7 @@ def extract_chapter(
     else:
         if not check_file_environ_path({mkvextract_exe_filename}):
             raise FileNotFoundError(
-                f"{mkvextract_exe_filename} cannot be found in "
-                f"environment path"
+                f"{mkvextract_exe_filename} cannot be found in " f"environment path"
             )
     if not os.path.isdir(output_file_dir):
         os.makedirs(output_file_dir)
@@ -920,9 +900,7 @@ def extract_chapter(
     media_info_list: list = MediaInfo.parse(input_filepath).to_data()["tracks"]
     menu_track_type: str = "Menu"
     menu_info_list: list = [
-        track
-        for track in media_info_list
-        if track["track_type"] == menu_track_type
+        track for track in media_info_list if track["track_type"] == menu_track_type
     ]
     if not menu_info_list:
         return
@@ -939,9 +917,7 @@ def extract_chapter(
             f"{re_result.group(3)}.{re_result.group(4)}"
         )
         chapter_name: str = menu_info_dict[key]
-        chapter_info_list.append(
-            dict(start_time=start_time, chapter_name=chapter_name)
-        )
+        chapter_info_list.append(dict(start_time=start_time, chapter_name=chapter_name))
 
     if not chapter_info_list:
         return
@@ -957,103 +933,120 @@ def extract_chapter(
         else:
             chapter_extension = all_format_info_dict["matroska"]["ext"]
 
-        output_file_fullname: str = output_file_name + chapter_extension
-        output_filepath: str = os.path.join(
-            output_file_dir, output_file_fullname
+        output_filename_fullname: str = output_file_name + chapter_extension
+        output_filepath: str = os.path.join(output_file_dir, output_filename_fullname)
+
+        valid_output_filename_fullname: str = get_filename_with_valid_mark(
+            output_filename_fullname
+        )
+        valid_output_filepath: str = os.path.join(
+            output_file_dir, valid_output_filename_fullname
         )
 
-        mkvextract_exe_filepath: str = os.path.join(
-            mkvextract_exe_file_dir, mkvextract_exe_filename
-        )
+        if os.path.isfile(output_filepath):
+            os.remove(output_filepath)
 
-        menu_key: str = "chapters"
-        ogm_menu_key: str = "--simple"
-        menu_value: str = output_filepath
-
-        cmd_param_list: list = [
-            mkvextract_exe_filepath,
-            input_filepath,
-            menu_key,
-            menu_value,
-        ]
-
-        if chapter_format == "ogm":
-            cmd_param_list.append(ogm_menu_key)
-
-        param_debug_str: str = (
-            f"extraction menu: param: "
-            f"{subprocess.list2cmdline(cmd_param_list)}"
-        )
-        g_logger.log(logging.DEBUG, param_debug_str)
-
-        start_info_str: str = (
-            f"extraction menu: "
-            f"start extract {output_file_fullname} "
-            f"from {input_filepath}"
-        )
-        print(start_info_str, file=sys.stderr)
-        g_logger.log(logging.INFO, start_info_str)
-
-        process = subprocess.Popen(
-            cmd_param_list,
-            stdout=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            errors="ignore",
-        )
-
-        stdout_lines: list = []
-        while process.poll() is None:
-            stdout_line = process.stdout.readline()
-            stdout_lines.append(stdout_line)
-            print(stdout_line, end="", file=sys.stderr)
-
-        return_code = process.returncode
-
-        if return_code == 0:
-            end_info_str: str = (
-                f"extraction mkvextract menu: "
-                f"extract {output_file_fullname} "
-                f"from {input_filepath} successfully."
+        if os.path.isfile(valid_output_filepath):
+            skip_info_str: str = (
+                f"extraction mkvextract menu: {valid_output_filepath} "
+                f"already existed, skip extraction."
             )
-            print(end_info_str, file=sys.stderr)
-            g_logger.log(logging.INFO, end_info_str)
-        elif return_code == 1:
-            warning_prefix = "Warning:"
-            warning_text_str = "".join(
-                line
-                for line in stdout_lines
-                if line.startswith(warning_prefix)
-            )
-            stdout_text_str = "".join(stdout_lines)
-            warning_str: str = (
-                "extraction mkvextract attachment: "
-                "mkvextract has output at least one warning, "
-                "but extraction did continue.\n"
-                f"warning:\n{warning_text_str}"
-                f"stdout:\n{stdout_text_str}"
-            )
-            print(warning_str, file=sys.stderr)
-            g_logger.log(logging.WARNING, warning_str)
+
+            print(skip_info_str, file=sys.stderr)
+            g_logger.log(logging.INFO, skip_info_str)
+            output_filepath = valid_output_filepath
         else:
-            error_str = (
-                f"extraction mkvextract menu: "
-                f"extract {output_file_fullname} "
-                f"from {input_filepath} unsuccessfully!"
+
+            mkvextract_exe_filepath: str = os.path.join(
+                mkvextract_exe_file_dir, mkvextract_exe_filename
             )
-            print(error_str, file=sys.stderr)
-            raise subprocess.CalledProcessError(
-                returncode=return_code,
-                cmd=subprocess.list2cmdline(cmd_param_list),
-                output=stdout_text_str,
+
+            menu_key: str = "chapters"
+            ogm_menu_key: str = "--simple"
+            menu_value: str = output_filepath
+
+            cmd_param_list: list = [
+                mkvextract_exe_filepath,
+                input_filepath,
+                menu_key,
+                menu_value,
+            ]
+
+            if chapter_format == "ogm":
+                cmd_param_list.append(ogm_menu_key)
+
+            param_debug_str: str = (
+                f"extraction mkvextract menu: param: "
+                f"{subprocess.list2cmdline(cmd_param_list)}"
             )
+            g_logger.log(logging.DEBUG, param_debug_str)
+
+            start_info_str: str = (
+                f"extraction menu: "
+                f"start extract {output_filename_fullname} "
+                f"from {input_filepath}"
+            )
+            print(start_info_str, file=sys.stderr)
+            g_logger.log(logging.INFO, start_info_str)
+
+            process = subprocess.Popen(
+                cmd_param_list,
+                stdout=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="ignore",
+            )
+
+            stdout_lines: list = []
+            while process.poll() is None:
+                stdout_line = process.stdout.readline()
+                stdout_lines.append(stdout_line)
+                print(stdout_line, end="", file=sys.stderr)
+
+            return_code = process.returncode
+
+            if return_code == 0:
+                end_info_str: str = (
+                    f"extraction mkvextract menu: "
+                    f"extract {output_filename_fullname} "
+                    f"from {input_filepath} successfully."
+                )
+                print(end_info_str, file=sys.stderr)
+                g_logger.log(logging.INFO, end_info_str)
+            elif return_code == 1:
+                warning_prefix = "Warning:"
+                warning_text_str = "".join(
+                    line for line in stdout_lines if line.startswith(warning_prefix)
+                )
+                stdout_text_str = "".join(stdout_lines)
+                warning_str: str = (
+                    "extraction mkvextract attachment: "
+                    "mkvextract has output at least one warning, "
+                    "but extraction did continue.\n"
+                    f"warning:\n{warning_text_str}"
+                    f"stdout:\n{stdout_text_str}"
+                )
+                print(warning_str, file=sys.stderr)
+                g_logger.log(logging.WARNING, warning_str)
+            else:
+                error_str = (
+                    f"extraction mkvextract menu: "
+                    f"extract {output_filename_fullname} "
+                    f"from {input_filepath} unsuccessfully!"
+                )
+                print(error_str, file=sys.stderr)
+                raise subprocess.CalledProcessError(
+                    returncode=return_code,
+                    cmd=subprocess.list2cmdline(cmd_param_list),
+                    output=stdout_text_str,
+                )
+            os.rename(output_filepath, valid_output_filepath)
+            output_filepath = valid_output_filepath
     else:
-        output_file_fullname: str = output_file_name + all_format_info_dict[
+        output_filename_fullname: str = output_file_name + all_format_info_dict[
             "matroska"
         ]["ext"]
-        output_filepath: str = os.path.join(
-            output_file_dir, output_file_fullname
-        )
+        output_filepath: str = os.path.join(output_file_dir, output_filename_fullname)
         chapter_info_list.sort(key=lambda element: element["start_time"])
         chapters_xml = minidom.Document()
 
@@ -1065,9 +1058,7 @@ def extract_chapter(
             chapter_atom_node = chapters_xml.createElement("ChapterAtom")
             edition_entry_node.appendChild(chapter_atom_node)
 
-            chapter_time_start_node = chapters_xml.createElement(
-                "ChapterTimeStart"
-            )
+            chapter_time_start_node = chapters_xml.createElement("ChapterTimeStart")
             chapter_atom_node.appendChild(chapter_time_start_node)
 
             text_node = chapters_xml.createTextNode(chapter_info["start_time"])
@@ -1079,9 +1070,7 @@ def extract_chapter(
             chapter_string_node = chapters_xml.createElement("ChapterString")
             chapter_display_node.appendChild(chapter_string_node)
 
-            text_node = chapters_xml.createTextNode(
-                chapter_info["chapter_name"]
-            )
+            text_node = chapters_xml.createTextNode(chapter_info["chapter_name"])
             chapter_string_node.appendChild(text_node)
 
         with open(output_filepath, "w", encoding="utf-8-sig") as xml_file:
@@ -1126,8 +1115,7 @@ def extract_audio_track(
 ) -> list:
     if not isinstance(input_filepath, str):
         raise TypeError(
-            f"type of input_filepath must be str "
-            f"instead of {type(input_filepath)}"
+            f"type of input_filepath must be str " f"instead of {type(input_filepath)}"
         )
 
     if not isinstance(output_file_dir, str):
@@ -1144,8 +1132,7 @@ def extract_audio_track(
 
     if not isinstance(audio_track, str):
         raise TypeError(
-            f"type of audio_track must be str "
-            f"instead of {type(audio_track)}"
+            f"type of audio_track must be str " f"instead of {type(audio_track)}"
         )
 
     if not isinstance(mkvextract_exe_file_dir, str):
@@ -1186,8 +1173,7 @@ def extract_audio_track(
     else:
         if not check_file_environ_path({mkvextract_exe_filename}):
             raise FileNotFoundError(
-                f"{mkvextract_exe_filename} cannot be found in "
-                f"environment path"
+                f"{mkvextract_exe_filename} cannot be found in " f"environment path"
             )
 
     ffmpeg_exe_filename: str = "ffmpeg.exe"
@@ -1199,20 +1185,17 @@ def extract_audio_track(
         all_filename_list: list = os.listdir(ffmpeg_exe_file_dir)
         if ffmpeg_exe_filename not in all_filename_list:
             raise FileNotFoundError(
-                f"{ffmpeg_exe_filename} cannot be found in "
-                f"{ffmpeg_exe_file_dir}"
+                f"{ffmpeg_exe_filename} cannot be found in " f"{ffmpeg_exe_file_dir}"
             )
     else:
         if not check_file_environ_path({ffmpeg_exe_filename}):
             raise FileNotFoundError(
-                f"{ffmpeg_exe_filename} cannot be found in "
-                f"environment path"
+                f"{ffmpeg_exe_filename} cannot be found in " f"environment path"
             )
 
     media_info_list: list = MediaInfo.parse(input_filepath).to_data()["tracks"]
     audio_info_dict: dict = next(
-        (track for track in media_info_list if track["track_type"] == "Audio"),
-        None,
+        (track for track in media_info_list if track["track_type"] == "Audio"), None,
     )
 
     audio_track_cnt: int = 0
@@ -1247,16 +1230,13 @@ def extract_audio_track(
                 elif format_profile == "layer 2":
                     track_suffix = "mp2"
                 else:
-                    raise RuntimeError(
-                        f"Unknown format_profile: {format_profile}"
-                    )
+                    raise RuntimeError(f"Unknown format_profile: {format_profile}")
             else:
                 if audio_info_dict["codec_id_hint"].lower() == "mp3":
                     track_suffix = "mp3"
                 else:
                     raise RuntimeError(
-                        f"Unknown codec_id_hint: "
-                        f"{audio_info_dict['codec_id_hint']}"
+                        f"Unknown codec_id_hint: " f"{audio_info_dict['codec_id_hint']}"
                     )
         elif audio_format == "e-ac-3":
             track_suffix = "ec3"
@@ -1313,22 +1293,16 @@ def extract_audio_track(
             stream_size_byte=int(audio_info_dict["stream_size"])
             if "stream_size" in audio_info_dict.keys()
             else -1,
-            title=audio_info_dict["title"]
-            if "title" in audio_info_dict.keys()
-            else "",
+            title=audio_info_dict["title"] if "title" in audio_info_dict.keys() else "",
             language=audio_info_dict["language"]
             if "language" in audio_info_dict.keys()
             else "",
             default_bool=True
             if "default" not in audio_info_dict.keys()
-            else (
-                True if audio_info_dict["default"].lower() == "yes" else False
-            ),
+            else (True if audio_info_dict["default"].lower() == "yes" else False),
             forced_bool=True
             if "forced" not in audio_info_dict.keys()
-            else (
-                True if audio_info_dict["forced"].lower() == "yes" else False
-            ),
+            else (True if audio_info_dict["forced"].lower() == "yes" else False),
         )
         audio_track_file_list.append(audio_track_file)
         if audio_track == "default" and audio_track_cnt == 1:
@@ -1337,14 +1311,11 @@ def extract_audio_track(
     return audio_track_file_list
 
 
-def get_video_with_valid_metadata(
-    filepath: str, output_dir: str, output_name: str
-):
+def get_video_with_valid_metadata(filepath: str, output_dir: str, output_name: str):
     media_info_data: dict = MediaInfo.parse(filepath).to_data()
     media_info_list: list = media_info_data["tracks"]
     video_info_dict: dict = next(
-        (track for track in media_info_list if track["track_type"] == "Video"),
-        None,
+        (track for track in media_info_list if track["track_type"] == "Video"), None,
     )
 
     full_filename: str = os.path.basename(filepath)
@@ -1395,8 +1366,7 @@ def extract_video_track(
 ) -> VideoTrackFile:
     if not isinstance(input_filepath, str):
         raise TypeError(
-            f"type of input_filepath must be str "
-            f"instead of {type(input_filepath)}"
+            f"type of input_filepath must be str " f"instead of {type(input_filepath)}"
         )
 
     if not isinstance(output_file_dir, str):
@@ -1442,8 +1412,7 @@ def extract_video_track(
     else:
         if not check_file_environ_path({mkvextract_exe_filename}):
             raise FileNotFoundError(
-                f"{mkvextract_exe_filename} cannot be found in "
-                f"environment path"
+                f"{mkvextract_exe_filename} cannot be found in " f"environment path"
             )
 
     ffmpeg_exe_filename: str = "ffmpeg.exe"
@@ -1455,14 +1424,12 @@ def extract_video_track(
         all_filename_list: list = os.listdir(ffmpeg_exe_file_dir)
         if ffmpeg_exe_filename not in all_filename_list:
             raise FileNotFoundError(
-                f"{ffmpeg_exe_filename} cannot be found in "
-                f"{ffmpeg_exe_file_dir}"
+                f"{ffmpeg_exe_filename} cannot be found in " f"{ffmpeg_exe_file_dir}"
             )
     else:
         if not check_file_environ_path({ffmpeg_exe_filename}):
             raise FileNotFoundError(
-                f"{ffmpeg_exe_filename} cannot be found in "
-                f"environment path"
+                f"{ffmpeg_exe_filename} cannot be found in " f"environment path"
             )
 
     valid_video_filepath: str = get_video_with_valid_metadata(
@@ -1471,18 +1438,13 @@ def extract_video_track(
         output_name=output_file_name,
     )
 
-    media_info_list: list = MediaInfo.parse(valid_video_filepath).to_data()[
-        "tracks"
-    ]
+    media_info_list: list = MediaInfo.parse(valid_video_filepath).to_data()["tracks"]
     video_info_dict: dict = next(
-        (track for track in media_info_list if track["track_type"] == "Video"),
-        None,
+        (track for track in media_info_list if track["track_type"] == "Video"), None,
     )
     frame_rate_info_dict: dict = get_fr_and_original_fr(video_info_dict)
 
-    color_specification_dict: dict = get_proper_color_specification(
-        video_info_dict
-    )
+    color_specification_dict: dict = get_proper_color_specification(video_info_dict)
 
     hdr_info_dict: dict = get_proper_hdr_info(video_info_dict)
 
@@ -1576,9 +1538,7 @@ def extract_video_track(
         stream_size_byte=int(video_info_dict["stream_size"])
         if "stream_size" in video_info_dict.keys()
         else -1,
-        title=video_info_dict["title"]
-        if "title" in video_info_dict.keys()
-        else "",
+        title=video_info_dict["title"] if "title" in video_info_dict.keys() else "",
         language=video_info_dict["language"]
         if "language" in video_info_dict.keys()
         else "",
@@ -1594,22 +1554,16 @@ def extract_video_track(
         ]
         if hdr_info_dict
         else "",
-        min_mastering_display_luminance=hdr_info_dict[
-            "min_mastering_display_luminance"
-        ]
+        min_mastering_display_luminance=hdr_info_dict["min_mastering_display_luminance"]
         if hdr_info_dict
         else -1,
-        max_mastering_display_luminance=hdr_info_dict[
-            "max_mastering_display_luminance"
-        ]
+        max_mastering_display_luminance=hdr_info_dict["max_mastering_display_luminance"]
         if hdr_info_dict
         else -1,
         max_content_light_level=hdr_info_dict["max_content_light_level"]
         if hdr_info_dict
         else -1,
-        max_frameaverage_light_level=hdr_info_dict[
-            "max_frameaverage_light_level"
-        ]
+        max_frameaverage_light_level=hdr_info_dict["max_frameaverage_light_level"]
         if hdr_info_dict
         else -1,
     )
@@ -1631,8 +1585,7 @@ def copy_video(
 ) -> VideoTrackFile:
     if not isinstance(input_filepath, str):
         raise TypeError(
-            f"type of input_filepath must be str "
-            f"instead of {type(input_filepath)}"
+            f"type of input_filepath must be str " f"instead of {type(input_filepath)}"
         )
 
     if not isinstance(output_file_dir, str):
@@ -1656,18 +1609,13 @@ def copy_video(
         output_name=output_file_name,
     )
 
-    media_info_list: list = MediaInfo.parse(valid_video_filepath).to_data()[
-        "tracks"
-    ]
+    media_info_list: list = MediaInfo.parse(valid_video_filepath).to_data()["tracks"]
     video_info_dict: dict = next(
-        (track for track in media_info_list if track["track_type"] == "Video"),
-        None,
+        (track for track in media_info_list if track["track_type"] == "Video"), None,
     )
     frame_rate_info_dict: dict = get_fr_and_original_fr(video_info_dict)
 
-    color_specification_dict: dict = get_proper_color_specification(
-        video_info_dict
-    )
+    color_specification_dict: dict = get_proper_color_specification(video_info_dict)
 
     hdr_info_dict: dict = get_proper_hdr_info(video_info_dict)
 
@@ -1675,16 +1623,41 @@ def copy_video(
         if using_original_if_possible:
             output_filepath = input_filepath
         else:
-            input_full_filename: str = os.path.basename(input_filepath)
-            input_extension: str = os.path.splitext(input_full_filename)[1]
-            output_full_filename: str = (
+            input_filename_fullname: str = os.path.basename(input_filepath)
+            input_extension: str = os.path.splitext(input_filename_fullname)[1]
+
+            output_filename_fullname: str = (
                 output_file_name + "_copy" + input_extension
             )
             output_filepath: str = os.path.join(
-                output_file_dir, output_full_filename
+                output_file_dir, output_filename_fullname
             )
-            if not os.path.isfile(output_filepath):
-                shutil.copyfile(input_filepath, output_filepath)
+
+            valid_output_filename_fullname: str = get_filename_with_valid_mark(
+                output_filename_fullname
+            )
+            valid_output_filepath: str = os.path.join(
+                output_file_dir, valid_output_filename_fullname
+            )
+
+            if os.path.isfile(output_filepath):
+                os.remove(output_filepath)
+
+            if os.path.isfile(valid_output_filepath):
+                skip_info_str: str = (
+                    f"copy video: {valid_output_filepath} "
+                    f"already existed, skip copy."
+                )
+
+                print(skip_info_str, file=sys.stderr)
+                g_logger.log(logging.INFO, skip_info_str)
+                output_filepath = valid_output_filepath
+            else:
+                if not os.path.isfile(output_filepath):
+                    shutil.copyfile(input_filepath, output_filepath)
+                os.rename(output_filepath, valid_output_filepath)
+                output_filepath = valid_output_filepath
+
     else:
         output_filepath: str = valid_video_filepath
 
@@ -1726,9 +1699,7 @@ def copy_video(
         stream_size_byte=int(video_info_dict["stream_size"])
         if "stream_size" in video_info_dict.keys()
         else -1,
-        title=video_info_dict["title"]
-        if "title" in video_info_dict.keys()
-        else "",
+        title=video_info_dict["title"] if "title" in video_info_dict.keys() else "",
         language=video_info_dict["language"]
         if "language" in video_info_dict.keys()
         else "",
@@ -1744,22 +1715,16 @@ def copy_video(
         ]
         if hdr_info_dict
         else "",
-        min_mastering_display_luminance=hdr_info_dict[
-            "min_mastering_display_luminance"
-        ]
+        min_mastering_display_luminance=hdr_info_dict["min_mastering_display_luminance"]
         if hdr_info_dict
         else -1,
-        max_mastering_display_luminance=hdr_info_dict[
-            "max_mastering_display_luminance"
-        ]
+        max_mastering_display_luminance=hdr_info_dict["max_mastering_display_luminance"]
         if hdr_info_dict
         else -1,
         max_content_light_level=hdr_info_dict["max_content_light_level"]
         if hdr_info_dict
         else -1,
-        max_frameaverage_light_level=hdr_info_dict[
-            "max_frameaverage_light_level"
-        ]
+        max_frameaverage_light_level=hdr_info_dict["max_frameaverage_light_level"]
         if hdr_info_dict
         else -1,
     )
@@ -1879,16 +1844,13 @@ def extract_series_audios(
                 elif format_profile == "layer 2":
                     track_suffix = "mp2"
                 else:
-                    raise RuntimeError(
-                        f"Unknown format_profile: {format_profile}"
-                    )
+                    raise RuntimeError(f"Unknown format_profile: {format_profile}")
             else:
                 if audio_info_dict["codec_id_hint"].lower() == "mp3":
                     track_suffix = "mp3"
                 else:
                     raise RuntimeError(
-                        f"Unknown codec_id_hint: "
-                        f"{audio_info_dict['codec_id_hint']}"
+                        f"Unknown codec_id_hint: " f"{audio_info_dict['codec_id_hint']}"
                     )
         elif audio_format == "e-ac-3":
             track_suffix = "ec3"
@@ -1906,12 +1868,7 @@ def extract_series_audios(
         if mkv_bool:
             audio_index: int = int(audio_info_dict["streamorder"])
             output_filepath = extract_track_mkvextract(
-                filepath,
-                output_dir,
-                filename,
-                track_suffix,
-                "audio",
-                audio_index,
+                filepath, output_dir, filename, track_suffix, "audio", audio_index,
             )
         else:
             output_filepath = extract_track_ffmpeg(
