@@ -8,7 +8,7 @@ It supports series mission mode, you can transcode a series of videos, add audio
 
 It supports changing fps, changing sar, hdr, vfr and so on.
 
-Document: [Media Master](https://aceclee.art/archives/category/media-master)
+Document: [Media Master](https://aceclee.art/archives/category/media-master).
 
 Supported frameserver: VapourSynth.
 
